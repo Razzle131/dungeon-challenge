@@ -1,0 +1,54 @@
+version: "2"
+run:
+  relative-path-mode: gomod
+output:
+  sort-order:
+    - linter
+    - severity
+    - file
+linters:
+  enable:
+    - copyloopvar
+    - cyclop
+    - dupl
+    - errname
+    - errorlint
+    - exhaustruct
+    - forcetypeassert
+    - funlen
+    - gocognit
+    - goconst
+    - gocritic
+    - godox
+    - goheader
+    - gosec
+    - gosmopolitan
+    - iface
+    - inamedparam
+    - ireturn
+    - maintidx
+    - misspell
+    - mnd
+    - nestif
+    - nilerr
+    - nilnesserr
+    - noctx
+    - usestdlibvars
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
