@@ -32,7 +32,7 @@ func New(filePath string) (*EventFileReader, error) {
 
 func (e *EventFileReader) CloseFileOrLog() {
 	if err := e.file.Close(); err != nil {
-		slog.Error("closing file", "error", err.Error())
+		e.logger.Error("closing file", "error", err.Error())
 	}
 }
 
