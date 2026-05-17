@@ -1,0 +1,1344 @@
+
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+		<title>events: Go Coverage Report</title>
+		<style>
+			body {
+				background: black;
+				color: rgb(80, 80, 80);
+			}
+			body, pre, #legend span {
+				font-family: Menlo, monospace;
+				font-weight: bold;
+			}
+			#topbar {
+				background: black;
+				position: fixed;
+				top: 0; left: 0; right: 0;
+				height: 42px;
+				border-bottom: 1px solid rgb(80, 80, 80);
+			}
+			#content {
+				margin-top: 50px;
+			}
+			#nav, #legend {
+				float: left;
+				margin-left: 10px;
+			}
+			#legend {
+				margin-top: 12px;
+			}
+			#nav {
+				margin-top: 10px;
+			}
+			#legend span {
+				margin: 0 5px;
+			}
+			.cov0 { color: rgb(192, 0, 0) }
+.cov1 { color: rgb(128, 128, 128) }
+.cov2 { color: rgb(116, 140, 131) }
+.cov3 { color: rgb(104, 152, 134) }
+.cov4 { color: rgb(92, 164, 137) }
+.cov5 { color: rgb(80, 176, 140) }
+.cov6 { color: rgb(68, 188, 143) }
+.cov7 { color: rgb(56, 200, 146) }
+.cov8 { color: rgb(44, 212, 149) }
+.cov9 { color: rgb(32, 224, 152) }
+.cov10 { color: rgb(20, 236, 155) }
+
+		</style>
+	</head>
+	<body>
+		<div id="topbar">
+			<div id="nav">
+				<select id="files">
+				
+				<option value="file0">github.com/Razzle131/dungeon-challenge/adapters/events/events.go (0.0%)</option>
+				
+				<option value="file1">github.com/Razzle131/dungeon-challenge/adapters/players/players.go (0.0%)</option>
+				
+				<option value="file2">github.com/Razzle131/dungeon-challenge/adapters/printer/printer.go (0.0%)</option>
+				
+				<option value="file3">github.com/Razzle131/dungeon-challenge/config/config.go (0.0%)</option>
+				
+				<option value="file4">github.com/Razzle131/dungeon-challenge/core/mocks/mock.go (0.0%)</option>
+				
+				<option value="file5">github.com/Razzle131/dungeon-challenge/core/models.go (0.0%)</option>
+				
+				<option value="file6">github.com/Razzle131/dungeon-challenge/core/service.go (58.3%)</option>
+				
+				<option value="file7">github.com/Razzle131/dungeon-challenge/main.go (0.0%)</option>
+				
+				</select>
+			</div>
+			<div id="legend">
+				<span>not tracked</span>
+			
+				<span class="cov0">no coverage</span>
+				<span class="cov1">low coverage</span>
+				<span class="cov2">*</span>
+				<span class="cov3">*</span>
+				<span class="cov4">*</span>
+				<span class="cov5">*</span>
+				<span class="cov6">*</span>
+				<span class="cov7">*</span>
+				<span class="cov8">*</span>
+				<span class="cov9">*</span>
+				<span class="cov10">high coverage</span>
+			
+			</div>
+		</div>
+		<div id="content">
+		
+		<pre class="file" id="file0" style="display: none">package events
+
+import (
+        "bufio"
+        "log/slog"
+        "os"
+        "strconv"
+        "strings"
+        "time"
+
+        "github.com/Razzle131/dungeon-challenge/core"
+)
+
+type EventFileReader struct {
+        file    *os.File
+        scanner *bufio.Scanner
+}
+
+func New(filePath string) (*EventFileReader, error) <span class="cov0" title="0">{
+        file, err := os.Open(filePath)
+        if err != nil </span><span class="cov0" title="0">{
+                return nil, err
+        }</span>
+
+        <span class="cov0" title="0">return &amp;EventFileReader{
+                file:    file,
+                scanner: bufio.NewScanner(file),
+        }, nil</span>
+}
+
+func (e *EventFileReader) CloseFileOrLog() <span class="cov0" title="0">{
+        if err := e.file.Close(); err != nil </span><span class="cov0" title="0">{
+                slog.Error("closing file", "error", err.Error())
+        }</span>
+}
+
+func (e *EventFileReader) GetNextEvent() (core.Event, error) <span class="cov0" title="0">{
+        if e.scanner.Scan() </span><span class="cov0" title="0">{
+                line := e.scanner.Text()
+                tmp := strings.Split(strings.TrimSpace(line), " ")
+
+                eventTime, err := time.Parse("[15:04:05]", tmp[0])
+                if err != nil </span><span class="cov0" title="0">{
+                        return core.Event{}, err
+                }</span>
+
+                <span class="cov0" title="0">playerId, err := strconv.Atoi(tmp[1])
+                if err != nil </span><span class="cov0" title="0">{
+                        return core.Event{}, err
+                }</span>
+
+                <span class="cov0" title="0">eventId, err := strconv.Atoi(tmp[2])
+                if err != nil </span><span class="cov0" title="0">{
+                        return core.Event{}, err
+                }</span>
+
+                <span class="cov0" title="0">var extraParam any = ""
+                if len(tmp) &gt; 3 &amp;&amp; eventId == 9 </span><span class="cov0" title="0">{
+                        extraParam = tmp[3]
+                }</span>
+                <span class="cov0" title="0">if len(tmp) &gt; 3 &amp;&amp; (eventId == 10 || eventId == 11) </span><span class="cov0" title="0">{
+                        extraParam, _ = strconv.Atoi(tmp[3])
+                }</span>
+
+                <span class="cov0" title="0">return core.Event{
+                        EventTime:     tmp[0][1 : len(tmp[0])-1],
+                        EventTimeUnix: int(eventTime.Unix()),
+                        PlayerId:      playerId,
+                        EventId:       eventId,
+                        ExtraParam:    extraParam,
+                }, nil</span>
+        }
+
+        <span class="cov0" title="0">return core.Event{}, core.ErrNoMoreEvents</span>
+}
+</pre>
+		
+		<pre class="file" id="file1" style="display: none">package players
+
+import (
+        "context"
+        "slices"
+
+        "github.com/Razzle131/dungeon-challenge/core"
+)
+
+type PlayerCacheRepository struct {
+        players map[int]core.Player
+}
+
+func New() *PlayerCacheRepository <span class="cov0" title="0">{
+        return &amp;PlayerCacheRepository{
+                players: make(map[int]core.Player),
+        }
+}</span>
+
+func (r *PlayerCacheRepository) AddPlayer(ctx context.Context, p core.Player) (core.Player, error) <span class="cov0" title="0">{
+        if _, found := r.players[p.Id]; found </span><span class="cov0" title="0">{
+                return core.Player{}, core.ErrAddedAlready
+        }</span>
+
+        <span class="cov0" title="0">r.players[p.Id] = p
+        return p, nil</span>
+}
+
+func (r *PlayerCacheRepository) UpdatePlayer(ctx context.Context, p core.Player) error <span class="cov0" title="0">{
+        if _, found := r.players[p.Id]; !found </span><span class="cov0" title="0">{
+                return core.ErrNotFound
+        }</span>
+
+        <span class="cov0" title="0">r.players[p.Id] = p
+        return nil</span>
+}
+
+func (r *PlayerCacheRepository) GetPlayerById(ctx context.Context, id int) (core.Player, error) <span class="cov0" title="0">{
+        res, found := r.players[id]
+        if !found </span><span class="cov0" title="0">{
+                return core.Player{}, core.ErrNotFound
+        }</span>
+
+        <span class="cov0" title="0">return res, nil</span>
+}
+
+func (r *PlayerCacheRepository) GetAllPlayers(ctx context.Context) []core.Player <span class="cov0" title="0">{
+        res := make([]core.Player, 0, len(r.players))
+        for _, p := range r.players </span><span class="cov0" title="0">{
+                res = append(res, p)
+        }</span>
+
+        <span class="cov0" title="0">slices.SortFunc(res, func(a, b core.Player) int </span><span class="cov0" title="0">{
+                return a.Id - b.Id
+        }</span>)
+
+        <span class="cov0" title="0">return res</span>
+}
+</pre>
+		
+		<pre class="file" id="file2" style="display: none">package printer
+
+import (
+        "fmt"
+
+        "github.com/Razzle131/dungeon-challenge/core"
+)
+
+type FmtPrinter struct{}
+
+func New() *FmtPrinter <span class="cov0" title="0">{
+        return &amp;FmtPrinter{}
+}</span>
+
+func (p *FmtPrinter) PrintEventRegister(e core.Event) <span class="cov0" title="0">{
+        fmt.Printf("[%s] Player [%v] registered\n", e.EventTime, e.PlayerId)
+}</span>
+
+func (p *FmtPrinter) PrintEventEnter(e core.Event) <span class="cov0" title="0">{
+        fmt.Printf("[%s] Player [%v] entered the dungeon\n", e.EventTime, e.PlayerId)
+}</span>
+
+func (p *FmtPrinter) PrintEventKillMonster(e core.Event) <span class="cov0" title="0">{
+        fmt.Printf("[%s] Player [%v] killed the monster\n", e.EventTime, e.PlayerId)
+}</span>
+
+func (p *FmtPrinter) PrintEventNextFloor(e core.Event) <span class="cov0" title="0">{
+        fmt.Printf("[%s] Player [%v] went to the next floor\n", e.EventTime, e.PlayerId)
+}</span>
+
+func (p *FmtPrinter) PrintEventPrevFloor(e core.Event) <span class="cov0" title="0">{
+        fmt.Printf("[%s] Player [%v] went to the previous floor\n", e.EventTime, e.PlayerId)
+}</span>
+
+func (p *FmtPrinter) PrintEventEnterBoss(e core.Event) <span class="cov0" title="0">{
+        fmt.Printf("[%s] Player [%v] entered the boss's floor\n", e.EventTime, e.PlayerId)
+}</span>
+
+func (p *FmtPrinter) PrintEventKillBoss(e core.Event) <span class="cov0" title="0">{
+        fmt.Printf("[%s] Player [%v] killed the boss\n", e.EventTime, e.PlayerId)
+}</span>
+
+func (p *FmtPrinter) PrintEventLeft(e core.Event) <span class="cov0" title="0">{
+        fmt.Printf("[%s] Player [%v] left the dungeon\n", e.EventTime, e.PlayerId)
+}</span>
+
+func (p *FmtPrinter) PrintEventCannotContinue(e core.Event) <span class="cov0" title="0">{
+        fmt.Printf("[%s] Player [%v] cannot continue due to [%s]\n", e.EventTime, e.PlayerId, e.ExtraParam)
+}</span>
+
+func (p *FmtPrinter) PrintEventHealed(e core.Event) <span class="cov0" title="0">{
+        fmt.Printf("[%s] Player [%v] has restored [%v] of health\n", e.EventTime, e.PlayerId, e.ExtraParam)
+}</span>
+
+func (p *FmtPrinter) PrintEventDamaged(e core.Event) <span class="cov0" title="0">{
+        fmt.Printf("[%s] Player [%v] recieved [%v] of damage\n", e.EventTime, e.PlayerId, e.ExtraParam)
+}</span>
+
+func (p *FmtPrinter) PrintEventDisqualified(e core.Event) <span class="cov0" title="0">{
+        fmt.Printf("[%s] Player [%v] is disqualified\n", e.EventTime, e.PlayerId)
+}</span>
+
+func (p *FmtPrinter) PrintEventDead(e core.Event) <span class="cov0" title="0">{
+        fmt.Printf("[%s] Player [%v] is dead\n", e.EventTime, e.PlayerId)
+}</span>
+
+func (p *FmtPrinter) PrintEventImpossibleMove(e core.Event) <span class="cov0" title="0">{
+        fmt.Printf("[%s] Player [%v] makes imposible move [%v]\n", e.EventTime, e.PlayerId, e.EventId)
+}</span>
+
+func (p *FmtPrinter) PrintReportLabel() <span class="cov0" title="0">{
+        fmt.Println("Final report:")
+}</span>
+
+func (p *FmtPrinter) PrintReport(info core.ReportInfo) <span class="cov0" title="0">{
+        fmt.Printf("[%s] %v [%s, %s, %s] HP:%v\n",
+                info.Status,
+                info.Id,
+                unixToTimeFormat(info.TotalTime),
+                unixToTimeFormat(info.AvgTime),
+                unixToTimeFormat(info.BossTime),
+                info.Hp)
+}</span>
+
+const (
+        secondsPerHour   = 3600
+        secondsPerMinute = 60
+)
+
+func unixToTimeFormat(t int) string <span class="cov0" title="0">{
+        hours := t / secondsPerHour
+        minutes := (t % secondsPerHour) / secondsPerMinute
+        seconds := t % secondsPerMinute
+
+        return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
+}</span>
+</pre>
+		
+		<pre class="file" id="file3" style="display: none">package config
+
+import (
+        "encoding/json"
+        "os"
+        "time"
+)
+
+type jsonConfig struct {
+        Floors        int    `json:"Floors"`
+        Monsters      int    `json:"Monsters"`
+        OpenAt        string `json:"OpenAt"`
+        DurationHours int    `json:"Duration"`
+}
+
+type Config struct {
+        Floors       int
+        Monsters     int
+        OpenAt       int
+        DurationUnix int
+}
+
+const secondsPerHour = 3600
+
+func MustLoad(configPath string) Config <span class="cov0" title="0">{
+        file, err := os.Open(configPath)
+        if err != nil </span><span class="cov0" title="0">{
+                panic(err)</span>
+        }
+        <span class="cov0" title="0">defer file.Close()
+
+        var jsonCfg jsonConfig
+        err = json.NewDecoder(file).Decode(&amp;jsonCfg)
+        if err != nil </span><span class="cov0" title="0">{
+                panic(err)</span>
+        }
+
+        <span class="cov0" title="0">parsedTime, err := time.Parse("15:04:05", jsonCfg.OpenAt)
+        if err != nil </span><span class="cov0" title="0">{
+                panic(err)</span>
+        }
+
+        <span class="cov0" title="0">return Config{
+                Floors:       jsonCfg.Floors,
+                Monsters:     jsonCfg.Monsters,
+                OpenAt:       int(parsedTime.Unix()),
+                DurationUnix: jsonCfg.DurationHours * secondsPerHour,
+        }</span>
+}
+</pre>
+		
+		<pre class="file" id="file4" style="display: none">// Code generated by MockGen. DO NOT EDIT.
+// Source: ./core/ports.go
+//
+// Generated by this command:
+//
+//        mockgen -source=./core/ports.go -destination=./core/mocks/mock.go
+//
+
+// Package mock_core is a generated GoMock package.
+package mock_core
+
+import (
+        context "context"
+        reflect "reflect"
+
+        core "github.com/Razzle131/dungeon-challenge/core"
+        gomock "go.uber.org/mock/gomock"
+)
+
+// MockEventReader is a mock of EventReader interface.
+type MockEventReader struct {
+        ctrl     *gomock.Controller
+        recorder *MockEventReaderMockRecorder
+        isgomock struct{}
+}
+
+// MockEventReaderMockRecorder is the mock recorder for MockEventReader.
+type MockEventReaderMockRecorder struct {
+        mock *MockEventReader
+}
+
+// NewMockEventReader creates a new mock instance.
+func NewMockEventReader(ctrl *gomock.Controller) *MockEventReader <span class="cov0" title="0">{
+        mock := &amp;MockEventReader{ctrl: ctrl}
+        mock.recorder = &amp;MockEventReaderMockRecorder{mock}
+        return mock
+}</span>
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockEventReader) EXPECT() *MockEventReaderMockRecorder <span class="cov0" title="0">{
+        return m.recorder
+}</span>
+
+// GetNextEvent mocks base method.
+func (m *MockEventReader) GetNextEvent() (core.Event, error) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "GetNextEvent")
+        ret0, _ := ret[0].(core.Event)
+        ret1, _ := ret[1].(error)
+        return ret0, ret1
+}</span>
+
+// GetNextEvent indicates an expected call of GetNextEvent.
+func (mr *MockEventReaderMockRecorder) GetNextEvent() *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNextEvent", reflect.TypeOf((*MockEventReader)(nil).GetNextEvent))
+}</span>
+
+// MockPlayerRepository is a mock of PlayerRepository interface.
+type MockPlayerRepository struct {
+        ctrl     *gomock.Controller
+        recorder *MockPlayerRepositoryMockRecorder
+        isgomock struct{}
+}
+
+// MockPlayerRepositoryMockRecorder is the mock recorder for MockPlayerRepository.
+type MockPlayerRepositoryMockRecorder struct {
+        mock *MockPlayerRepository
+}
+
+// NewMockPlayerRepository creates a new mock instance.
+func NewMockPlayerRepository(ctrl *gomock.Controller) *MockPlayerRepository <span class="cov0" title="0">{
+        mock := &amp;MockPlayerRepository{ctrl: ctrl}
+        mock.recorder = &amp;MockPlayerRepositoryMockRecorder{mock}
+        return mock
+}</span>
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockPlayerRepository) EXPECT() *MockPlayerRepositoryMockRecorder <span class="cov0" title="0">{
+        return m.recorder
+}</span>
+
+// AddPlayer mocks base method.
+func (m *MockPlayerRepository) AddPlayer(ctx context.Context, p core.Player) (core.Player, error) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "AddPlayer", ctx, p)
+        ret0, _ := ret[0].(core.Player)
+        ret1, _ := ret[1].(error)
+        return ret0, ret1
+}</span>
+
+// AddPlayer indicates an expected call of AddPlayer.
+func (mr *MockPlayerRepositoryMockRecorder) AddPlayer(ctx, p any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddPlayer", reflect.TypeOf((*MockPlayerRepository)(nil).AddPlayer), ctx, p)
+}</span>
+
+// GetAllPlayers mocks base method.
+func (m *MockPlayerRepository) GetAllPlayers(ctx context.Context) []core.Player <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "GetAllPlayers", ctx)
+        ret0, _ := ret[0].([]core.Player)
+        return ret0
+}</span>
+
+// GetAllPlayers indicates an expected call of GetAllPlayers.
+func (mr *MockPlayerRepositoryMockRecorder) GetAllPlayers(ctx any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllPlayers", reflect.TypeOf((*MockPlayerRepository)(nil).GetAllPlayers), ctx)
+}</span>
+
+// GetPlayerById mocks base method.
+func (m *MockPlayerRepository) GetPlayerById(ctx context.Context, id int) (core.Player, error) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "GetPlayerById", ctx, id)
+        ret0, _ := ret[0].(core.Player)
+        ret1, _ := ret[1].(error)
+        return ret0, ret1
+}</span>
+
+// GetPlayerById indicates an expected call of GetPlayerById.
+func (mr *MockPlayerRepositoryMockRecorder) GetPlayerById(ctx, id any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPlayerById", reflect.TypeOf((*MockPlayerRepository)(nil).GetPlayerById), ctx, id)
+}</span>
+
+// UpdatePlayer mocks base method.
+func (m *MockPlayerRepository) UpdatePlayer(ctx context.Context, p core.Player) error <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        ret := m.ctrl.Call(m, "UpdatePlayer", ctx, p)
+        ret0, _ := ret[0].(error)
+        return ret0
+}</span>
+
+// UpdatePlayer indicates an expected call of UpdatePlayer.
+func (mr *MockPlayerRepositoryMockRecorder) UpdatePlayer(ctx, p any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdatePlayer", reflect.TypeOf((*MockPlayerRepository)(nil).UpdatePlayer), ctx, p)
+}</span>
+
+// MockPrinter is a mock of Printer interface.
+type MockPrinter struct {
+        ctrl     *gomock.Controller
+        recorder *MockPrinterMockRecorder
+        isgomock struct{}
+}
+
+// MockPrinterMockRecorder is the mock recorder for MockPrinter.
+type MockPrinterMockRecorder struct {
+        mock *MockPrinter
+}
+
+// NewMockPrinter creates a new mock instance.
+func NewMockPrinter(ctrl *gomock.Controller) *MockPrinter <span class="cov0" title="0">{
+        mock := &amp;MockPrinter{ctrl: ctrl}
+        mock.recorder = &amp;MockPrinterMockRecorder{mock}
+        return mock
+}</span>
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockPrinter) EXPECT() *MockPrinterMockRecorder <span class="cov0" title="0">{
+        return m.recorder
+}</span>
+
+// PrintEventCannotContinue mocks base method.
+func (m *MockPrinter) PrintEventCannotContinue(e core.Event) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        m.ctrl.Call(m, "PrintEventCannotContinue", e)
+}</span>
+
+// PrintEventCannotContinue indicates an expected call of PrintEventCannotContinue.
+func (mr *MockPrinterMockRecorder) PrintEventCannotContinue(e any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintEventCannotContinue", reflect.TypeOf((*MockPrinter)(nil).PrintEventCannotContinue), e)
+}</span>
+
+// PrintEventDamaged mocks base method.
+func (m *MockPrinter) PrintEventDamaged(e core.Event) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        m.ctrl.Call(m, "PrintEventDamaged", e)
+}</span>
+
+// PrintEventDamaged indicates an expected call of PrintEventDamaged.
+func (mr *MockPrinterMockRecorder) PrintEventDamaged(e any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintEventDamaged", reflect.TypeOf((*MockPrinter)(nil).PrintEventDamaged), e)
+}</span>
+
+// PrintEventDead mocks base method.
+func (m *MockPrinter) PrintEventDead(e core.Event) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        m.ctrl.Call(m, "PrintEventDead", e)
+}</span>
+
+// PrintEventDead indicates an expected call of PrintEventDead.
+func (mr *MockPrinterMockRecorder) PrintEventDead(e any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintEventDead", reflect.TypeOf((*MockPrinter)(nil).PrintEventDead), e)
+}</span>
+
+// PrintEventDisqualified mocks base method.
+func (m *MockPrinter) PrintEventDisqualified(e core.Event) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        m.ctrl.Call(m, "PrintEventDisqualified", e)
+}</span>
+
+// PrintEventDisqualified indicates an expected call of PrintEventDisqualified.
+func (mr *MockPrinterMockRecorder) PrintEventDisqualified(e any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintEventDisqualified", reflect.TypeOf((*MockPrinter)(nil).PrintEventDisqualified), e)
+}</span>
+
+// PrintEventEnter mocks base method.
+func (m *MockPrinter) PrintEventEnter(e core.Event) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        m.ctrl.Call(m, "PrintEventEnter", e)
+}</span>
+
+// PrintEventEnter indicates an expected call of PrintEventEnter.
+func (mr *MockPrinterMockRecorder) PrintEventEnter(e any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintEventEnter", reflect.TypeOf((*MockPrinter)(nil).PrintEventEnter), e)
+}</span>
+
+// PrintEventEnterBoss mocks base method.
+func (m *MockPrinter) PrintEventEnterBoss(e core.Event) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        m.ctrl.Call(m, "PrintEventEnterBoss", e)
+}</span>
+
+// PrintEventEnterBoss indicates an expected call of PrintEventEnterBoss.
+func (mr *MockPrinterMockRecorder) PrintEventEnterBoss(e any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintEventEnterBoss", reflect.TypeOf((*MockPrinter)(nil).PrintEventEnterBoss), e)
+}</span>
+
+// PrintEventHealed mocks base method.
+func (m *MockPrinter) PrintEventHealed(e core.Event) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        m.ctrl.Call(m, "PrintEventHealed", e)
+}</span>
+
+// PrintEventHealed indicates an expected call of PrintEventHealed.
+func (mr *MockPrinterMockRecorder) PrintEventHealed(e any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintEventHealed", reflect.TypeOf((*MockPrinter)(nil).PrintEventHealed), e)
+}</span>
+
+// PrintEventImpossibleMove mocks base method.
+func (m *MockPrinter) PrintEventImpossibleMove(e core.Event) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        m.ctrl.Call(m, "PrintEventImpossibleMove", e)
+}</span>
+
+// PrintEventImpossibleMove indicates an expected call of PrintEventImpossibleMove.
+func (mr *MockPrinterMockRecorder) PrintEventImpossibleMove(e any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintEventImpossibleMove", reflect.TypeOf((*MockPrinter)(nil).PrintEventImpossibleMove), e)
+}</span>
+
+// PrintEventKillBoss mocks base method.
+func (m *MockPrinter) PrintEventKillBoss(e core.Event) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        m.ctrl.Call(m, "PrintEventKillBoss", e)
+}</span>
+
+// PrintEventKillBoss indicates an expected call of PrintEventKillBoss.
+func (mr *MockPrinterMockRecorder) PrintEventKillBoss(e any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintEventKillBoss", reflect.TypeOf((*MockPrinter)(nil).PrintEventKillBoss), e)
+}</span>
+
+// PrintEventKillMonster mocks base method.
+func (m *MockPrinter) PrintEventKillMonster(e core.Event) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        m.ctrl.Call(m, "PrintEventKillMonster", e)
+}</span>
+
+// PrintEventKillMonster indicates an expected call of PrintEventKillMonster.
+func (mr *MockPrinterMockRecorder) PrintEventKillMonster(e any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintEventKillMonster", reflect.TypeOf((*MockPrinter)(nil).PrintEventKillMonster), e)
+}</span>
+
+// PrintEventLeft mocks base method.
+func (m *MockPrinter) PrintEventLeft(e core.Event) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        m.ctrl.Call(m, "PrintEventLeft", e)
+}</span>
+
+// PrintEventLeft indicates an expected call of PrintEventLeft.
+func (mr *MockPrinterMockRecorder) PrintEventLeft(e any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintEventLeft", reflect.TypeOf((*MockPrinter)(nil).PrintEventLeft), e)
+}</span>
+
+// PrintEventNextFloor mocks base method.
+func (m *MockPrinter) PrintEventNextFloor(e core.Event) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        m.ctrl.Call(m, "PrintEventNextFloor", e)
+}</span>
+
+// PrintEventNextFloor indicates an expected call of PrintEventNextFloor.
+func (mr *MockPrinterMockRecorder) PrintEventNextFloor(e any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintEventNextFloor", reflect.TypeOf((*MockPrinter)(nil).PrintEventNextFloor), e)
+}</span>
+
+// PrintEventPrevFloor mocks base method.
+func (m *MockPrinter) PrintEventPrevFloor(e core.Event) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        m.ctrl.Call(m, "PrintEventPrevFloor", e)
+}</span>
+
+// PrintEventPrevFloor indicates an expected call of PrintEventPrevFloor.
+func (mr *MockPrinterMockRecorder) PrintEventPrevFloor(e any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintEventPrevFloor", reflect.TypeOf((*MockPrinter)(nil).PrintEventPrevFloor), e)
+}</span>
+
+// PrintEventRegister mocks base method.
+func (m *MockPrinter) PrintEventRegister(e core.Event) <span class="cov0" title="0">{
+        m.ctrl.T.Helper()
+        m.ctrl.Call(m, "PrintEventRegister", e)
+}</span>
+
+// PrintEventRegister indicates an expected call of PrintEventRegister.
+func (mr *MockPrinterMockRecorder) PrintEventRegister(e any) *gomock.Call <span class="cov0" title="0">{
+        mr.mock.ctrl.T.Helper()
+        return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrintEventRegister", reflect.TypeOf((*MockPrinter)(nil).PrintEventRegister), e)
+}</span>
+</pre>
+		
+		<pre class="file" id="file5" style="display: none">package core
+
+type Player struct {
+        Id       int
+        CurLevel int
+        Levels   []Level
+        Stats    PlayerStats
+}
+
+type Level struct {
+        FirstEntered int
+        FinishedAt   int
+        Monsters     int
+        IsBossLevel  bool
+        IsFirstEntry bool
+        IsFinished   bool
+}
+
+type PlayerStats struct {
+        Hp        int
+        Status    string
+        TotalTime int
+        AvgTime   int
+        BossTime  int
+}
+
+func NewPlayer(id int, info dungeon) Player <span class="cov0" title="0">{
+        res := Player{
+                Id:       id,
+                CurLevel: -1,
+                Levels:   make([]Level, info.floors),
+                Stats: PlayerStats{
+                        Hp:        MaxHealth,
+                        Status:    StatusNewborn,
+                        TotalTime: 0,
+                        AvgTime:   0,
+                        BossTime:  0,
+                },
+        }
+
+        for i := 0; i &lt; len(res.Levels); i++ </span><span class="cov0" title="0">{
+                res.Levels[i].Monsters = info.monsters
+                res.Levels[i].IsFirstEntry = true
+        }</span>
+
+        <span class="cov0" title="0">return res</span>
+}
+
+type Event struct {
+        EventTime     string
+        EventTimeUnix int
+        PlayerId      int
+        EventId       int
+        ExtraParam    any
+}
+
+type dungeon struct {
+        opensAt  int
+        closesAt int
+        monsters int
+        floors   int
+}
+
+type ReportInfo struct {
+        Status    string
+        Id        int
+        TotalTime int
+        AvgTime   int
+        BossTime  int
+        Hp        int
+}
+</pre>
+		
+		<pre class="file" id="file6" style="display: none">package core
+
+import (
+        "context"
+        "errors"
+        "log/slog"
+        "slices"
+
+        "github.com/Razzle131/dungeon-challenge/config"
+)
+
+// Микро дизайн дока
+// проверки на дисквалификацию в каждом методе:
+//         + тестируемость функций, прямолинейность логики
+//         - повторение кода
+//
+
+// Текущие TODO
+// Проверки открыт ли данж
+// Проверки закрыт ли данж
+// Подсчет времени в случае закрытия данжа с игроком внутри
+
+type Service struct {
+        playerRepo  PlayerRepository
+        eventReader EventReader
+        printer     Printer
+        dungeonInfo dungeon
+}
+
+func New(playerRepo PlayerRepository, eventReader EventReader, printer Printer, cfg config.Config) *Service <span class="cov10" title="56">{
+        return &amp;Service{
+                playerRepo:  playerRepo,
+                eventReader: eventReader,
+                printer:     printer,
+                dungeonInfo: dungeon{
+                        opensAt:  cfg.OpenAt,
+                        closesAt: cfg.OpenAt + cfg.DurationUnix,
+                        monsters: cfg.Monsters,
+                        floors:   cfg.Monsters,
+                },
+        }
+}</span>
+
+func (s *Service) ProcessEvents(ctx context.Context) <span class="cov0" title="0">{
+        curEvent, err := s.eventReader.GetNextEvent()
+        prevEvent := curEvent
+        for !errors.Is(err, ErrNoMoreEvents) </span><span class="cov0" title="0">{
+                var player Player
+                player, err = s.playerRepo.GetPlayerById(ctx, curEvent.PlayerId)
+                if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
+                        player, _ = s.playerRepo.AddPlayer(ctx, NewPlayer(curEvent.PlayerId, s.dungeonInfo))
+
+                }</span> else<span class="cov0" title="0"> if err != nil </span><span class="cov0" title="0">{
+                        continue</span>
+                }
+
+                <span class="cov0" title="0">s.processEvent(ctx, curEvent, player)
+
+                prevEvent = curEvent
+                curEvent, err = s.eventReader.GetNextEvent()
+                for prevEvent.EventTimeUnix &gt; curEvent.EventTimeUnix </span><span class="cov0" title="0">{
+                        curEvent.EventTimeUnix += secondsPerDay
+                }</span>
+        }
+
+        <span class="cov0" title="0">s.printer.PrintReportLabel()
+
+        players := s.playerRepo.GetAllPlayers(ctx)
+        for _, player := range players </span><span class="cov0" title="0">{
+                s.printer.PrintReport(formReportInfo(player, s.dungeonInfo))
+        }</span>
+}
+
+func (s *Service) processEvent(ctx context.Context, event Event, player Player) <span class="cov0" title="0">{
+        var err error
+        switch event.EventId </span>{
+        case eventRegister:<span class="cov0" title="0">
+                err = withPrint(ctx, player, event, s.RegisterPlayer, s.printer.PrintEventRegister)</span>
+        case eventEnter:<span class="cov0" title="0">
+                err = withPrint(ctx, player, event, s.PlayerEntersDungeon, s.printer.PrintEventEnter)</span>
+        case eventKillMonster:<span class="cov0" title="0">
+                err = withPrint(ctx, player, event, s.PlayerKillsMonster, s.printer.PrintEventKillMonster)</span>
+        case eventNextFloor:<span class="cov0" title="0">
+                err = withPrint(ctx, player, event, s.PlayerMovesNextFloor, s.printer.PrintEventNextFloor)</span>
+        case eventPrevFloor:<span class="cov0" title="0">
+                err = withPrint(ctx, player, event, s.PlayerMovesPrevFloor, s.printer.PrintEventPrevFloor)</span>
+        case eventEnterBoss:<span class="cov0" title="0">
+                err = withPrint(ctx, player, event, s.PlayerEntersBoss, s.printer.PrintEventEnterBoss)</span>
+        case eventKillBoss:<span class="cov0" title="0">
+                err = withPrint(ctx, player, event, s.PlayerKilledBoss, s.printer.PrintEventKillBoss)</span>
+        case eventLeft:<span class="cov0" title="0">
+                err = withPrint(ctx, player, event, s.PlayerLeftDungeon, s.printer.PrintEventLeft)</span>
+        case eventCannotContinue:<span class="cov0" title="0">
+                err = withPrint(ctx, player, event, s.PlayerCannotContinue, s.printer.PrintEventCannotContinue)</span>
+        case eventHealed:<span class="cov0" title="0">
+                amount, ok := event.ExtraParam.(int)
+                if !ok </span><span class="cov0" title="0">{
+                        break</span>
+                }
+
+                <span class="cov0" title="0">err = s.PlayerHealed(ctx, player, amount, event.EventTimeUnix)
+                if err == nil </span><span class="cov0" title="0">{
+                        s.printer.PrintEventHealed(event)
+                }</span>
+        case eventDamaged:<span class="cov0" title="0">
+                amount, ok := event.ExtraParam.(int)
+                if !ok </span><span class="cov0" title="0">{
+                        break</span>
+                }
+
+                <span class="cov0" title="0">isDead, err := s.PlayerDamaged(ctx, player, amount, event.EventTimeUnix)
+                if err == nil </span><span class="cov0" title="0">{
+                        s.printer.PrintEventDamaged(event)
+                }</span>
+                <span class="cov0" title="0">if isDead </span><span class="cov0" title="0">{
+                        s.printer.PrintEventDead(event)
+                }</span>
+        }
+
+        <span class="cov0" title="0">if errors.Is(err, ErrImpossibleMove) </span><span class="cov0" title="0">{
+                s.printer.PrintEventImpossibleMove(event)
+        }</span>
+
+        <span class="cov0" title="0">if errors.Is(err, ErrPlayerDisqualified) </span><span class="cov0" title="0">{
+                s.printer.PrintEventDisqualified(event)
+        }</span>
+}
+
+func withPrint(ctx context.Context, player Player, e Event, call func(ctx context.Context, player Player, eventTime int) error, printCall func(e Event)) error <span class="cov0" title="0">{
+        err := call(ctx, player, e.EventTimeUnix)
+        if err != nil </span><span class="cov0" title="0">{
+                return err
+
+        }</span>
+        <span class="cov0" title="0">printCall(e)
+        return nil</span>
+}
+
+func (s *Service) RegisterPlayer(ctx context.Context, player Player, eventTime int) error <span class="cov3" title="3">{
+        if player.Stats.Status == StatusDisqual </span><span class="cov1" title="1">{
+                return ErrPlayerIsDisqualified
+        }</span>
+
+        <span class="cov2" title="2">if player.Stats.Status != StatusNewborn </span><span class="cov1" title="1">{
+                return ErrImpossibleMove
+        }</span>
+
+        <span class="cov1" title="1">player.Stats.Status = StatusRegistered
+        err := s.playerRepo.UpdatePlayer(ctx, player)
+        if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
+                s.DisqualAndWrite(ctx, player)
+                return ErrPlayerDisqualified
+        }</span>
+        <span class="cov1" title="1">if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov1" title="1">return nil</span>
+}
+
+func (s *Service) PlayerEntersDungeon(ctx context.Context, player Player, eventTime int) error <span class="cov4" title="4">{
+        err := s.checkStatus(ctx, player, eventTime, []string{StatusRegistered})
+        if err != nil </span><span class="cov3" title="3">{
+                return err
+        }</span>
+
+        <span class="cov1" title="1">player.CurLevel = 0
+        player.Stats.Status = StatusInRun
+        player.Levels[0].IsFirstEntry = false
+        player.Levels[0].FirstEntered = eventTime
+        player.Stats.TotalTime = eventTime
+
+        err = s.playerRepo.UpdatePlayer(ctx, player)
+        if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
+                s.DisqualAndWrite(ctx, player)
+                return ErrPlayerDisqualified
+        }</span>
+        <span class="cov1" title="1">if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov1" title="1">return nil</span>
+}
+
+func (s *Service) PlayerKillsMonster(ctx context.Context, player Player, eventTime int) error <span class="cov5" title="6">{
+        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="3">{
+                return err
+        }</span>
+
+        <span class="cov3" title="3">if player.Levels[player.CurLevel].IsBossLevel </span><span class="cov1" title="1">{
+                return ErrImpossibleMove
+        }</span>
+
+        <span class="cov2" title="2">if player.Levels[player.CurLevel].Monsters &lt;= 0 </span><span class="cov1" title="1">{
+                return ErrImpossibleMove
+        }</span>
+
+        <span class="cov1" title="1">player.Levels[player.CurLevel].Monsters--
+        if player.Levels[player.CurLevel].Monsters &lt;= 0 </span><span class="cov1" title="1">{
+                player.Levels[player.CurLevel].FinishedAt = eventTime
+                player.Levels[player.CurLevel].IsFinished = true
+        }</span>
+
+        <span class="cov1" title="1">err = s.playerRepo.UpdatePlayer(ctx, player)
+        if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
+                s.DisqualAndWrite(ctx, player)
+                return ErrPlayerDisqualified
+        }</span>
+        <span class="cov1" title="1">if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov1" title="1">return nil</span>
+}
+
+func (s *Service) PlayerMovesNextFloor(ctx context.Context, player Player, eventTime int) error <span class="cov5" title="6">{
+        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="3">{
+                return err
+        }</span>
+
+        <span class="cov3" title="3">if player.CurLevel &gt;= len(player.Levels)-1 </span><span class="cov1" title="1">{
+                return ErrImpossibleMove
+        }</span>
+
+        <span class="cov2" title="2">player.CurLevel++
+        if player.Levels[player.CurLevel].IsFirstEntry </span><span class="cov2" title="2">{
+                player.Levels[player.CurLevel].FirstEntered = eventTime
+                player.Levels[player.CurLevel].IsFirstEntry = false
+        }</span>
+
+        <span class="cov2" title="2">if player.Levels[player.CurLevel].Monsters &lt;= 0 &amp;&amp; !player.Levels[player.CurLevel].IsFinished &amp;&amp; !player.Levels[player.CurLevel].IsBossLevel </span><span class="cov1" title="1">{
+                player.Levels[player.CurLevel].FinishedAt = eventTime
+                player.Levels[player.CurLevel].IsFinished = true
+        }</span>
+
+        <span class="cov2" title="2">err = s.playerRepo.UpdatePlayer(ctx, player)
+        if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
+                s.DisqualAndWrite(ctx, player)
+                return ErrPlayerDisqualified
+        }</span>
+        <span class="cov2" title="2">if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov2" title="2">return nil</span>
+}
+
+func (s *Service) PlayerMovesPrevFloor(ctx context.Context, player Player, eventTime int) error <span class="cov4" title="5">{
+        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="3">{
+                return err
+        }</span>
+
+        <span class="cov2" title="2">if player.CurLevel &lt;= 0 </span><span class="cov1" title="1">{
+                return ErrImpossibleMove
+        }</span>
+
+        <span class="cov1" title="1">player.CurLevel--
+        err = s.playerRepo.UpdatePlayer(ctx, player)
+        if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
+                s.DisqualAndWrite(ctx, player)
+                return ErrPlayerDisqualified
+        }</span>
+        <span class="cov1" title="1">if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov1" title="1">return nil</span>
+}
+
+func (s *Service) PlayerEntersBoss(ctx context.Context, player Player, eventTime int) error <span class="cov4" title="4">{
+        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="3">{
+                return err
+        }</span>
+
+        <span class="cov1" title="1">player.Levels[player.CurLevel].IsBossLevel = true
+        player.Levels[player.CurLevel].Monsters = 0
+
+        err = s.playerRepo.UpdatePlayer(ctx, player)
+        if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
+                s.DisqualAndWrite(ctx, player)
+                return ErrPlayerDisqualified
+        }</span>
+        <span class="cov1" title="1">if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov1" title="1">return nil</span>
+}
+
+func (s *Service) PlayerKilledBoss(ctx context.Context, player Player, eventTime int) error <span class="cov5" title="6">{
+        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="3">{
+                return err
+        }</span>
+
+        <span class="cov3" title="3">if !player.Levels[player.CurLevel].IsBossLevel </span><span class="cov1" title="1">{
+                return ErrImpossibleMove
+        }</span>
+
+        <span class="cov2" title="2">if player.Levels[player.CurLevel].IsFinished </span><span class="cov1" title="1">{
+                return ErrImpossibleMove
+        }</span>
+
+        <span class="cov1" title="1">player.Levels[player.CurLevel].FinishedAt = eventTime
+        player.Levels[player.CurLevel].IsFinished = true
+
+        err = s.playerRepo.UpdatePlayer(ctx, player)
+        if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
+                s.DisqualAndWrite(ctx, player)
+                return ErrPlayerDisqualified
+        }</span>
+        <span class="cov1" title="1">if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov1" title="1">return nil</span>
+}
+
+func (s *Service) PlayerLeftDungeon(ctx context.Context, player Player, eventTime int) error <span class="cov4" title="5">{
+        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="3">{
+                return err
+        }</span>
+
+        <span class="cov2" title="2">player.Stats.Status = StatusSuccess
+        for _, level := range player.Levels </span><span class="cov2" title="2">{
+                if !level.IsFinished </span><span class="cov1" title="1">{
+                        player.Stats.Status = StatusFail
+                        break</span>
+                }
+        }
+
+        <span class="cov2" title="2">player.Stats.TotalTime = eventTime - player.Stats.TotalTime
+
+        err = s.playerRepo.UpdatePlayer(ctx, player)
+        if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
+                s.DisqualAndWrite(ctx, player)
+                return ErrPlayerDisqualified
+        }</span>
+        <span class="cov2" title="2">if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov2" title="2">return nil</span>
+}
+
+func (s *Service) PlayerCannotContinue(ctx context.Context, player Player, eventTime int) error <span class="cov4" title="5">{
+        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun, StatusRegistered})
+        if err != nil </span><span class="cov3" title="3">{
+                return err
+        }</span>
+
+        <span class="cov2" title="2">player.Stats.Status = StatusDisqual
+        player.Stats.TotalTime = eventTime - player.Stats.TotalTime
+
+        err = s.playerRepo.UpdatePlayer(ctx, player)
+        if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
+                s.DisqualAndWrite(ctx, player)
+                return ErrPlayerDisqualified
+        }</span>
+        <span class="cov2" title="2">if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov2" title="2">return nil</span>
+}
+
+func (s *Service) PlayerHealed(ctx context.Context, player Player, amount int, eventTime int) error <span class="cov5" title="6">{
+        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="3">{
+                return err
+        }</span>
+
+        <span class="cov3" title="3">if amount &lt; 0 </span><span class="cov1" title="1">{
+                return ErrImpossibleMove
+        }</span>
+
+        <span class="cov2" title="2">player.Stats.Hp = min(player.Stats.Hp+amount, MaxHealth)
+
+        err = s.playerRepo.UpdatePlayer(ctx, player)
+        if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
+                s.DisqualAndWrite(ctx, player)
+                return ErrPlayerDisqualified
+        }</span>
+        <span class="cov2" title="2">if err != nil </span><span class="cov0" title="0">{
+                return err
+        }</span>
+
+        <span class="cov2" title="2">return nil</span>
+}
+
+func (s *Service) PlayerDamaged(ctx context.Context, player Player, amount int, eventTime int) (bool, error) <span class="cov5" title="6">{
+        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="3">{
+                return false, err
+        }</span>
+
+        <span class="cov3" title="3">if amount &lt; 0 </span><span class="cov1" title="1">{
+                return false, ErrImpossibleMove
+        }</span>
+
+        <span class="cov2" title="2">isDead := false
+        player.Stats.Hp = max(player.Stats.Hp-amount, 0)
+        if player.Stats.Hp &lt;= 0 </span><span class="cov1" title="1">{
+                player.Stats.Status = StatusFail
+                isDead = true
+                player.Stats.TotalTime = eventTime - player.Stats.TotalTime
+        }</span>
+
+        <span class="cov2" title="2">err = s.playerRepo.UpdatePlayer(ctx, player)
+        if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
+                s.DisqualAndWrite(ctx, player)
+                return false, ErrPlayerDisqualified
+        }</span>
+        <span class="cov2" title="2">if err != nil </span><span class="cov0" title="0">{
+                return false, err
+        }</span>
+
+        <span class="cov2" title="2">return isDead, nil</span>
+}
+
+func (s *Service) DisqualAndWrite(ctx context.Context, p Player) <span class="cov6" title="10">{
+        p.Stats.Status = StatusDisqual
+        err := s.playerRepo.UpdatePlayer(ctx, p)
+        if err != nil </span><span class="cov0" title="0">{
+                slog.Error("disqualify", "error", err)
+        }</span>
+}
+
+func (s *Service) checkStatus(ctx context.Context, player Player, eventTime int, neededStatuses []string) error <span class="cov9" title="53">{
+        if player.Stats.Status == StatusDisqual </span><span class="cov6" title="10">{
+                return ErrPlayerIsDisqualified
+        }</span>
+
+        <span class="cov9" title="43">if player.Stats.Status == StatusNewborn </span><span class="cov6" title="10">{
+                s.DisqualAndWrite(ctx, player)
+                return ErrPlayerDisqualified
+        }</span>
+
+        <span class="cov8" title="33">if s.dungeonInfo.opensAt &gt; eventTime || eventTime &gt; s.dungeonInfo.closesAt </span><span class="cov0" title="0">{
+                return ErrImpossibleMove
+        }</span>
+
+        <span class="cov8" title="33">if !slices.Contains(neededStatuses, player.Stats.Status) </span><span class="cov6" title="10">{
+                return ErrImpossibleMove
+        }</span>
+
+        <span class="cov8" title="23">return nil</span>
+}
+
+func formReportInfo(p Player, info dungeon) ReportInfo <span class="cov0" title="0">{
+        if p.Stats.Status == StatusInRun </span><span class="cov0" title="0">{
+                p.Stats.TotalTime = info.closesAt - p.Stats.TotalTime
+        }</span>
+
+        <span class="cov0" title="0">if p.Stats.Status != StatusSuccess &amp;&amp; p.Stats.Status != StatusFail </span><span class="cov0" title="0">{
+                p.Stats.Status = StatusDisqual
+        }</span>
+
+        <span class="cov0" title="0">res := ReportInfo{
+                Status:    p.Stats.Status,
+                Id:        p.Id,
+                TotalTime: p.Stats.TotalTime,
+                AvgTime:   0,
+                BossTime:  0,
+                Hp:        p.Stats.Hp,
+        }
+
+        avgTime := 0
+        floorsCompleted := 0
+        for _, level := range p.Levels </span><span class="cov0" title="0">{
+                if level.IsFinished &amp;&amp; !level.IsBossLevel </span><span class="cov0" title="0">{
+                        avgTime += level.FinishedAt - level.FirstEntered
+                        floorsCompleted++
+                }</span>
+                <span class="cov0" title="0">if level.IsFinished &amp;&amp; level.IsBossLevel </span><span class="cov0" title="0">{
+                        res.BossTime = level.FinishedAt - level.FirstEntered
+                }</span>
+        }
+
+        <span class="cov0" title="0">if floorsCompleted &gt; 0 </span><span class="cov0" title="0">{
+                res.AvgTime = avgTime / floorsCompleted
+        }</span>
+
+        <span class="cov0" title="0">return res</span>
+}
+</pre>
+		
+		<pre class="file" id="file7" style="display: none">package main
+
+import (
+        "context"
+        "flag"
+
+        "github.com/Razzle131/dungeon-challenge/adapters/events"
+        "github.com/Razzle131/dungeon-challenge/adapters/players"
+        "github.com/Razzle131/dungeon-challenge/adapters/printer"
+        "github.com/Razzle131/dungeon-challenge/config"
+        "github.com/Razzle131/dungeon-challenge/core"
+)
+
+func main() <span class="cov0" title="0">{
+        var configPath string
+        var inputPath string
+        flag.StringVar(&amp;configPath, "config", "config.json", "path to configuration file")
+        flag.StringVar(&amp;inputPath, "events", "events", "path to events file")
+        flag.Parse()
+
+        cfg := config.MustLoad(configPath)
+
+        eventReader, err := events.New(inputPath)
+        if err != nil </span><span class="cov0" title="0">{
+                panic(err)</span>
+        }
+
+        <span class="cov0" title="0">printer := printer.New()
+        playerRepo := players.New()
+
+        service := core.New(playerRepo, eventReader, printer, cfg)
+
+        service.ProcessEvents(context.Background())</span>
+}
+</pre>
+		
+		</div>
+	</body>
+	<script>
+	(function() {
+		var files = document.getElementById('files');
+		var visible;
+		files.addEventListener('change', onChange, false);
+		function select(part) {
+			if (visible)
+				visible.style.display = 'none';
+			visible = document.getElementById(part);
+			if (!visible)
+				return;
+			files.value = part;
+			visible.style.display = 'block';
+			location.hash = part;
+		}
+		function onChange() {
+			select(files.value);
+			window.scrollTo(0, 0);
+		}
+		if (location.hash != "") {
+			select(location.hash.substr(1));
+		}
+		if (!visible) {
+			select("file0");
+		}
+	})();
+	</script>
+</html>
