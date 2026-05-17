@@ -14,6 +14,7 @@ import (
 type EventFileReader struct {
 	file    *os.File
 	scanner *bufio.Scanner
+	logger  *slog.Logger
 }
 
 func New(filePath string) (*EventFileReader, error) {
@@ -25,6 +26,7 @@ func New(filePath string) (*EventFileReader, error) {
 	return &EventFileReader{
 		file:    file,
 		scanner: bufio.NewScanner(file),
+		logger:  slog.Default(),
 	}, nil
 }
 

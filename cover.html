@@ -108,6 +108,7 @@ import (
 type EventFileReader struct {
         file    *os.File
         scanner *bufio.Scanner
+        logger  *slog.Logger
 }
 
 func New(filePath string) (*EventFileReader, error) <span class="cov0" title="0">{
@@ -119,6 +120,7 @@ func New(filePath string) (*EventFileReader, error) <span class="cov0" title="0"
         <span class="cov0" title="0">return &amp;EventFileReader{
                 file:    file,
                 scanner: bufio.NewScanner(file),
+                logger:  slog.Default(),
         }, nil</span>
 }
 
@@ -811,6 +813,7 @@ type Service struct {
         eventReader EventReader
         printer     Printer
         dungeonInfo dungeon
+        logger      *slog.Logger
 }
 
 func New(playerRepo PlayerRepository, eventReader EventReader, printer Printer, cfg config.Config) *Service <span class="cov10" title="56">{
@@ -824,6 +827,7 @@ func New(playerRepo PlayerRepository, eventReader EventReader, printer Printer, 
                         monsters: cfg.Monsters,
                         floors:   cfg.Monsters,
                 },
+                logger: slog.Default(),
         }
 }</span>
 
@@ -1213,7 +1217,7 @@ func (s *Service) DisqualAndWrite(ctx context.Context, p Player) <span class="co
         p.Stats.Status = StatusDisqual
         err := s.playerRepo.UpdatePlayer(ctx, p)
         if err != nil </span><span class="cov0" title="0">{
-                slog.Error("disqualify", "error", err)
+                s.logger.Error("disqualify", "error", err)
         }</span>
 }
 
@@ -1302,8 +1306,9 @@ func main() <span class="cov0" title="0">{
         if err != nil </span><span class="cov0" title="0">{
                 panic(err)</span>
         }
+        <span class="cov0" title="0">defer eventReader.CloseFileOrLog()
 
-        <span class="cov0" title="0">printer := printer.New()
+        printer := printer.New()
         playerRepo := players.New()
 
         service := core.New(playerRepo, eventReader, printer, cfg)

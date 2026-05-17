@@ -24,6 +24,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer eventReader.CloseFileOrLog()
 
 	printer := printer.New()
 	playerRepo := players.New()

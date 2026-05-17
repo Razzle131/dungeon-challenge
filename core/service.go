@@ -25,6 +25,7 @@ type Service struct {
 	eventReader EventReader
 	printer     Printer
 	dungeonInfo dungeon
+	logger      *slog.Logger
 }
 
 func New(playerRepo PlayerRepository, eventReader EventReader, printer Printer, cfg config.Config) *Service {
@@ -38,6 +39,7 @@ func New(playerRepo PlayerRepository, eventReader EventReader, printer Printer, 
 			monsters: cfg.Monsters,
 			floors:   cfg.Monsters,
 		},
+		logger: slog.Default(),
 	}
 }
 
@@ -427,7 +429,7 @@ func (s *Service) DisqualAndWrite(ctx context.Context, p Player) {
 	p.Stats.Status = StatusDisqual
 	err := s.playerRepo.UpdatePlayer(ctx, p)
 	if err != nil {
-		slog.Error("disqualify", "error", err)
+		s.logger.Error("disqualify", "error", err)
 	}
 }
 
