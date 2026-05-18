@@ -47,13 +47,13 @@ linters:
       - builtin$
       - examples$
   settings:
-    nestif:
-      min-complexity: 6
     cyclop:
       max-complexity: 20
     misspell:
       ignore-rules:
         - recieved # линтер жалуется на опечатку из входных данных)
+    errcheck:
+      check-blank: true
       
 formatters:
   exclusions:
