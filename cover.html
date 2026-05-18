@@ -67,7 +67,7 @@
 				
 				<option value="file5">github.com/Razzle131/dungeon-challenge/core/models.go (0.0%)</option>
 				
-				<option value="file6">github.com/Razzle131/dungeon-challenge/core/service.go (58.3%)</option>
+				<option value="file6">github.com/Razzle131/dungeon-challenge/core/service.go (64.0%)</option>
 				
 				<option value="file7">github.com/Razzle131/dungeon-challenge/main.go (0.0%)</option>
 				
@@ -126,48 +126,52 @@ func New(filePath string) (*EventFileReader, error) <span class="cov0" title="0"
 
 func (e *EventFileReader) CloseFileOrLog() <span class="cov0" title="0">{
         if err := e.file.Close(); err != nil </span><span class="cov0" title="0">{
-                slog.Error("closing file", "error", err.Error())
+                e.logger.Error("closing file", "error", err.Error())
         }</span>
 }
 
-func (e *EventFileReader) GetNextEvent() (core.Event, error) <span class="cov0" title="0">{
-        if e.scanner.Scan() </span><span class="cov0" title="0">{
-                line := e.scanner.Text()
-                tmp := strings.Split(strings.TrimSpace(line), " ")
+func (e *EventFileReader) GetNextEvent() (core.Event, bool, error) <span class="cov0" title="0">{
+        scanRes := e.scanner.Scan()
+        if !scanRes </span><span class="cov0" title="0">{
+                return core.Event{}, scanRes, core.ErrNoMoreEvents
+        }</span>
 
-                eventTime, err := time.Parse("[15:04:05]", tmp[0])
+        <span class="cov0" title="0">line := e.scanner.Text()
+        tmp := strings.Split(strings.TrimSpace(line), " ")
+
+        eventTime, err := time.Parse("[15:04:05]", tmp[0])
+        if err != nil </span><span class="cov0" title="0">{
+                return core.Event{}, scanRes, err
+        }</span>
+
+        <span class="cov0" title="0">playerId, err := strconv.Atoi(tmp[1])
+        if err != nil </span><span class="cov0" title="0">{
+                return core.Event{}, scanRes, err
+        }</span>
+
+        <span class="cov0" title="0">eventId, err := strconv.Atoi(tmp[2])
+        if err != nil </span><span class="cov0" title="0">{
+                return core.Event{}, scanRes, err
+        }</span>
+
+        <span class="cov0" title="0">var extraParam any = ""
+        if len(tmp) &gt; 3 &amp;&amp; eventId == 9 </span><span class="cov0" title="0">{
+                extraParam = tmp[3]
+        }</span>
+        <span class="cov0" title="0">if len(tmp) &gt; 3 &amp;&amp; (eventId == 10 || eventId == 11) </span><span class="cov0" title="0">{
+                extraParam, err = strconv.Atoi(tmp[3])
                 if err != nil </span><span class="cov0" title="0">{
-                        return core.Event{}, err
+                        return core.Event{}, scanRes, err
                 }</span>
-
-                <span class="cov0" title="0">playerId, err := strconv.Atoi(tmp[1])
-                if err != nil </span><span class="cov0" title="0">{
-                        return core.Event{}, err
-                }</span>
-
-                <span class="cov0" title="0">eventId, err := strconv.Atoi(tmp[2])
-                if err != nil </span><span class="cov0" title="0">{
-                        return core.Event{}, err
-                }</span>
-
-                <span class="cov0" title="0">var extraParam any = ""
-                if len(tmp) &gt; 3 &amp;&amp; eventId == 9 </span><span class="cov0" title="0">{
-                        extraParam = tmp[3]
-                }</span>
-                <span class="cov0" title="0">if len(tmp) &gt; 3 &amp;&amp; (eventId == 10 || eventId == 11) </span><span class="cov0" title="0">{
-                        extraParam, _ = strconv.Atoi(tmp[3])
-                }</span>
-
-                <span class="cov0" title="0">return core.Event{
-                        EventTime:     tmp[0][1 : len(tmp[0])-1],
-                        EventTimeUnix: int(eventTime.Unix()),
-                        PlayerId:      playerId,
-                        EventId:       eventId,
-                        ExtraParam:    extraParam,
-                }, nil</span>
         }
 
-        <span class="cov0" title="0">return core.Event{}, core.ErrNoMoreEvents</span>
+        <span class="cov0" title="0">return core.Event{
+                EventTime:     tmp[0][1 : len(tmp[0])-1],
+                EventTimeUnix: eventTime.Unix(),
+                PlayerId:      playerId,
+                EventId:       eventId,
+                ExtraParam:    extraParam,
+        }, scanRes, nil</span>
 }
 </pre>
 		
@@ -320,7 +324,7 @@ const (
         secondsPerMinute = 60
 )
 
-func unixToTimeFormat(t int) string <span class="cov0" title="0">{
+func unixToTimeFormat(t int64) string <span class="cov0" title="0">{
         hours := t / secondsPerHour
         minutes := (t % secondsPerHour) / secondsPerMinute
         seconds := t % secondsPerMinute
@@ -347,7 +351,7 @@ type jsonConfig struct {
 type Config struct {
         Floors       int
         Monsters     int
-        OpenAt       int
+        OpenAt       int64
         DurationUnix int
 }
 
@@ -371,10 +375,14 @@ func MustLoad(configPath string) Config <span class="cov0" title="0">{
                 panic(err)</span>
         }
 
+        <span class="cov0" title="0">if jsonCfg.Floors &lt;= 0 </span><span class="cov0" title="0">{
+                panic("number of floors cant be nonpositive")</span>
+        }
+
         <span class="cov0" title="0">return Config{
                 Floors:       jsonCfg.Floors,
                 Monsters:     jsonCfg.Monsters,
-                OpenAt:       int(parsedTime.Unix()),
+                OpenAt:       parsedTime.Unix(),
                 DurationUnix: jsonCfg.DurationHours * secondsPerHour,
         }</span>
 }
@@ -723,8 +731,8 @@ type Player struct {
 }
 
 type Level struct {
-        FirstEntered int
-        FinishedAt   int
+        FirstEntered int64
+        FinishedAt   int64
         Monsters     int
         IsBossLevel  bool
         IsFirstEntry bool
@@ -734,16 +742,16 @@ type Level struct {
 type PlayerStats struct {
         Hp        int
         Status    string
-        TotalTime int
-        AvgTime   int
-        BossTime  int
+        TotalTime int64
+        AvgTime   int64
+        BossTime  int64
 }
 
-func NewPlayer(id int, info dungeon) Player <span class="cov0" title="0">{
+func NewPlayer(id int, info Dungeon) Player <span class="cov0" title="0">{
         res := Player{
                 Id:       id,
                 CurLevel: -1,
-                Levels:   make([]Level, info.floors),
+                Levels:   make([]Level, info.Floors),
                 Stats: PlayerStats{
                         Hp:        MaxHealth,
                         Status:    StatusNewborn,
@@ -754,7 +762,7 @@ func NewPlayer(id int, info dungeon) Player <span class="cov0" title="0">{
         }
 
         for i := 0; i &lt; len(res.Levels); i++ </span><span class="cov0" title="0">{
-                res.Levels[i].Monsters = info.monsters
+                res.Levels[i].Monsters = info.Monsters
                 res.Levels[i].IsFirstEntry = true
         }</span>
 
@@ -763,25 +771,25 @@ func NewPlayer(id int, info dungeon) Player <span class="cov0" title="0">{
 
 type Event struct {
         EventTime     string
-        EventTimeUnix int
+        EventTimeUnix int64
         PlayerId      int
         EventId       int
         ExtraParam    any
 }
 
-type dungeon struct {
-        opensAt  int
-        closesAt int
-        monsters int
-        floors   int
+type Dungeon struct {
+        OpensAt  int64
+        ClosesAt int64
+        Monsters int
+        Floors   int
 }
 
 type ReportInfo struct {
         Status    string
         Id        int
-        TotalTime int
-        AvgTime   int
-        BossTime  int
+        TotalTime int64
+        AvgTime   int64
+        BossTime  int64
         Hp        int
 }
 </pre>
@@ -797,68 +805,74 @@ import (
         "github.com/Razzle131/dungeon-challenge/config"
 )
 
-// Микро дизайн дока
-// проверки на дисквалификацию в каждом методе:
-//         + тестируемость функций, прямолинейность логики
-//         - повторение кода
-//
-
-// Текущие TODO
-// Проверки открыт ли данж
-// Проверки закрыт ли данж
-// Подсчет времени в случае закрытия данжа с игроком внутри
-
 type Service struct {
         playerRepo  PlayerRepository
         eventReader EventReader
         printer     Printer
-        dungeonInfo dungeon
+        dungeonInfo Dungeon
         logger      *slog.Logger
 }
 
-func New(playerRepo PlayerRepository, eventReader EventReader, printer Printer, cfg config.Config) *Service <span class="cov10" title="56">{
+func New(playerRepo PlayerRepository, eventReader EventReader, printer Printer, cfg config.Config) *Service <span class="cov10" title="68">{
         return &amp;Service{
                 playerRepo:  playerRepo,
                 eventReader: eventReader,
                 printer:     printer,
-                dungeonInfo: dungeon{
-                        opensAt:  cfg.OpenAt,
-                        closesAt: cfg.OpenAt + cfg.DurationUnix,
-                        monsters: cfg.Monsters,
-                        floors:   cfg.Monsters,
+                dungeonInfo: Dungeon{
+                        OpensAt:  cfg.OpenAt,
+                        ClosesAt: cfg.OpenAt + int64(cfg.DurationUnix),
+                        Monsters: cfg.Monsters,
+                        Floors:   cfg.Floors,
                 },
                 logger: slog.Default(),
         }
 }</span>
 
-func (s *Service) ProcessEvents(ctx context.Context) <span class="cov0" title="0">{
-        curEvent, err := s.eventReader.GetNextEvent()
-        prevEvent := curEvent
-        for !errors.Is(err, ErrNoMoreEvents) </span><span class="cov0" title="0">{
-                var player Player
-                player, err = s.playerRepo.GetPlayerById(ctx, curEvent.PlayerId)
-                if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
-                        player, _ = s.playerRepo.AddPlayer(ctx, NewPlayer(curEvent.PlayerId, s.dungeonInfo))
+const int64minValue = -1&lt;&lt;63 + 1
 
-                }</span> else<span class="cov0" title="0"> if err != nil </span><span class="cov0" title="0">{
-                        continue</span>
+func (s *Service) ProcessEvents(ctx context.Context) <span class="cov0" title="0">{
+        var prevEvent Event
+        prevEvent.EventTimeUnix = int64minValue
+        for </span><span class="cov0" title="0">{
+                curEvent := s.getNextEvent()
+                if curEvent.EventId == 0 </span><span class="cov0" title="0">{
+                        break</span>
                 }
+
+                <span class="cov0" title="0">for prevEvent.EventTimeUnix &gt; curEvent.EventTimeUnix </span><span class="cov0" title="0">{
+                        curEvent.EventTimeUnix += secondsPerDay
+                }</span>
+
+                <span class="cov0" title="0">var player Player
+                player, err := s.playerRepo.GetPlayerById(ctx, curEvent.PlayerId)
+                if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
+                        player, err = s.playerRepo.AddPlayer(ctx, NewPlayer(curEvent.PlayerId, s.dungeonInfo))
+                        if err != nil </span><span class="cov0" title="0">{
+                                s.logger.Error("process event add player", "error", err)
+                        }</span>
+                } else<span class="cov0" title="0"> if err != nil </span><span class="cov0" title="0">{
+                        s.logger.Error("process event get player", "error", err)
+                }</span>
 
                 <span class="cov0" title="0">s.processEvent(ctx, curEvent, player)
 
-                prevEvent = curEvent
-                curEvent, err = s.eventReader.GetNextEvent()
-                for prevEvent.EventTimeUnix &gt; curEvent.EventTimeUnix </span><span class="cov0" title="0">{
-                        curEvent.EventTimeUnix += secondsPerDay
-                }</span>
+                prevEvent = curEvent</span>
         }
 
         <span class="cov0" title="0">s.printer.PrintReportLabel()
 
         players := s.playerRepo.GetAllPlayers(ctx)
         for _, player := range players </span><span class="cov0" title="0">{
-                s.printer.PrintReport(formReportInfo(player, s.dungeonInfo))
+                s.printer.PrintReport(FormReportInfo(player, s.dungeonInfo))
         }</span>
+}
+
+func (s *Service) getNextEvent() Event <span class="cov0" title="0">{
+        curEvent, scanned, err := s.eventReader.GetNextEvent()
+        for scanned &amp;&amp; err != nil </span><span class="cov0" title="0">{
+                curEvent, scanned, err = s.eventReader.GetNextEvent()
+        }</span>
+        <span class="cov0" title="0">return curEvent</span>
 }
 
 func (s *Service) processEvent(ctx context.Context, event Event, player Player) <span class="cov0" title="0">{
@@ -916,7 +930,7 @@ func (s *Service) processEvent(ctx context.Context, event Event, player Player) 
         }</span>
 }
 
-func withPrint(ctx context.Context, player Player, e Event, call func(ctx context.Context, player Player, eventTime int) error, printCall func(e Event)) error <span class="cov0" title="0">{
+func withPrint(ctx context.Context, player Player, e Event, call func(ctx context.Context, player Player, eventTime int64) error, printCall func(e Event)) error <span class="cov0" title="0">{
         err := call(ctx, player, e.EventTimeUnix)
         if err != nil </span><span class="cov0" title="0">{
                 return err
@@ -926,55 +940,59 @@ func withPrint(ctx context.Context, player Player, e Event, call func(ctx contex
         return nil</span>
 }
 
-func (s *Service) RegisterPlayer(ctx context.Context, player Player, eventTime int) error <span class="cov3" title="3">{
+func (s *Service) RegisterPlayer(ctx context.Context, player Player, eventTime int64) error <span class="cov3" title="4">{
         if player.Stats.Status == StatusDisqual </span><span class="cov1" title="1">{
                 return ErrPlayerIsDisqualified
         }</span>
 
-        <span class="cov2" title="2">if player.Stats.Status != StatusNewborn </span><span class="cov1" title="1">{
+        <span class="cov3" title="3">if player.Stats.Status != StatusNewborn </span><span class="cov1" title="1">{
                 return ErrImpossibleMove
         }</span>
 
-        <span class="cov1" title="1">player.Stats.Status = StatusRegistered
+        <span class="cov2" title="2">player.Stats.Status = StatusRegistered
         err := s.playerRepo.UpdatePlayer(ctx, player)
         if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
                 s.DisqualAndWrite(ctx, player)
                 return ErrPlayerDisqualified
         }</span>
-        <span class="cov1" title="1">if err != nil </span><span class="cov0" title="0">{
+        <span class="cov2" title="2">if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
 
-        <span class="cov1" title="1">return nil</span>
+        <span class="cov2" title="2">return nil</span>
 }
 
-func (s *Service) PlayerEntersDungeon(ctx context.Context, player Player, eventTime int) error <span class="cov4" title="4">{
-        err := s.checkStatus(ctx, player, eventTime, []string{StatusRegistered})
-        if err != nil </span><span class="cov3" title="3">{
+func (s *Service) PlayerEntersDungeon(ctx context.Context, player Player, eventTime int64) error <span class="cov4" title="6">{
+        err := s.commonChecks(ctx, player, eventTime, []string{StatusRegistered})
+        if err != nil </span><span class="cov3" title="4">{
                 return err
         }</span>
 
-        <span class="cov1" title="1">player.CurLevel = 0
+        <span class="cov2" title="2">player.CurLevel = 0
         player.Stats.Status = StatusInRun
         player.Levels[0].IsFirstEntry = false
         player.Levels[0].FirstEntered = eventTime
         player.Stats.TotalTime = eventTime
+        if player.Levels[0].Monsters &lt;= 0 </span><span class="cov1" title="1">{
+                player.Levels[0].IsFinished = true
+                player.Levels[0].FinishedAt = eventTime
+        }</span>
 
-        err = s.playerRepo.UpdatePlayer(ctx, player)
+        <span class="cov2" title="2">err = s.playerRepo.UpdatePlayer(ctx, player)
         if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
                 s.DisqualAndWrite(ctx, player)
                 return ErrPlayerDisqualified
         }</span>
-        <span class="cov1" title="1">if err != nil </span><span class="cov0" title="0">{
+        <span class="cov2" title="2">if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
 
-        <span class="cov1" title="1">return nil</span>
+        <span class="cov2" title="2">return nil</span>
 }
 
-func (s *Service) PlayerKillsMonster(ctx context.Context, player Player, eventTime int) error <span class="cov5" title="6">{
-        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
-        if err != nil </span><span class="cov3" title="3">{
+func (s *Service) PlayerKillsMonster(ctx context.Context, player Player, eventTime int64) error <span class="cov5" title="7">{
+        err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="4">{
                 return err
         }</span>
 
@@ -1004,9 +1022,9 @@ func (s *Service) PlayerKillsMonster(ctx context.Context, player Player, eventTi
         <span class="cov1" title="1">return nil</span>
 }
 
-func (s *Service) PlayerMovesNextFloor(ctx context.Context, player Player, eventTime int) error <span class="cov5" title="6">{
-        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
-        if err != nil </span><span class="cov3" title="3">{
+func (s *Service) PlayerMovesNextFloor(ctx context.Context, player Player, eventTime int64) error <span class="cov5" title="7">{
+        err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="4">{
                 return err
         }</span>
 
@@ -1037,9 +1055,9 @@ func (s *Service) PlayerMovesNextFloor(ctx context.Context, player Player, event
         <span class="cov2" title="2">return nil</span>
 }
 
-func (s *Service) PlayerMovesPrevFloor(ctx context.Context, player Player, eventTime int) error <span class="cov4" title="5">{
-        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
-        if err != nil </span><span class="cov3" title="3">{
+func (s *Service) PlayerMovesPrevFloor(ctx context.Context, player Player, eventTime int64) error <span class="cov4" title="6">{
+        err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="4">{
                 return err
         }</span>
 
@@ -1060,16 +1078,19 @@ func (s *Service) PlayerMovesPrevFloor(ctx context.Context, player Player, event
         <span class="cov1" title="1">return nil</span>
 }
 
-func (s *Service) PlayerEntersBoss(ctx context.Context, player Player, eventTime int) error <span class="cov4" title="4">{
-        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
-        if err != nil </span><span class="cov3" title="3">{
+func (s *Service) PlayerEntersBoss(ctx context.Context, player Player, eventTime int64) error <span class="cov4" title="5">{
+        err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="4">{
                 return err
         }</span>
 
-        <span class="cov1" title="1">player.Levels[player.CurLevel].IsBossLevel = true
-        player.Levels[player.CurLevel].Monsters = 0
+        <span class="cov1" title="1">if !player.Levels[player.CurLevel].IsBossLevel </span><span class="cov1" title="1">{
+                player.Levels[player.CurLevel].IsBossLevel = true
+                player.Levels[player.CurLevel].IsFinished = false
+                player.Levels[player.CurLevel].Monsters = 0
+        }</span>
 
-        err = s.playerRepo.UpdatePlayer(ctx, player)
+        <span class="cov1" title="1">err = s.playerRepo.UpdatePlayer(ctx, player)
         if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
                 s.DisqualAndWrite(ctx, player)
                 return ErrPlayerDisqualified
@@ -1081,9 +1102,9 @@ func (s *Service) PlayerEntersBoss(ctx context.Context, player Player, eventTime
         <span class="cov1" title="1">return nil</span>
 }
 
-func (s *Service) PlayerKilledBoss(ctx context.Context, player Player, eventTime int) error <span class="cov5" title="6">{
-        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
-        if err != nil </span><span class="cov3" title="3">{
+func (s *Service) PlayerKilledBoss(ctx context.Context, player Player, eventTime int64) error <span class="cov5" title="7">{
+        err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="4">{
                 return err
         }</span>
 
@@ -1110,9 +1131,9 @@ func (s *Service) PlayerKilledBoss(ctx context.Context, player Player, eventTime
         <span class="cov1" title="1">return nil</span>
 }
 
-func (s *Service) PlayerLeftDungeon(ctx context.Context, player Player, eventTime int) error <span class="cov4" title="5">{
-        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
-        if err != nil </span><span class="cov3" title="3">{
+func (s *Service) PlayerLeftDungeon(ctx context.Context, player Player, eventTime int64) error <span class="cov4" title="6">{
+        err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="4">{
                 return err
         }</span>
 
@@ -1138,30 +1159,32 @@ func (s *Service) PlayerLeftDungeon(ctx context.Context, player Player, eventTim
         <span class="cov2" title="2">return nil</span>
 }
 
-func (s *Service) PlayerCannotContinue(ctx context.Context, player Player, eventTime int) error <span class="cov4" title="5">{
-        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun, StatusRegistered})
+func (s *Service) PlayerCannotContinue(ctx context.Context, player Player, eventTime int64) error <span class="cov4" title="6">{
+        err := s.commonChecks(ctx, player, s.dungeonInfo.OpensAt, []string{StatusInRun, StatusRegistered})
         if err != nil </span><span class="cov3" title="3">{
                 return err
         }</span>
 
-        <span class="cov2" title="2">player.Stats.Status = StatusDisqual
-        player.Stats.TotalTime = eventTime - player.Stats.TotalTime
+        <span class="cov3" title="3">if player.Stats.Status == StatusInRun </span><span class="cov1" title="1">{
+                player.Stats.TotalTime = eventTime - player.Stats.TotalTime
+        }</span>
+        <span class="cov3" title="3">player.Stats.Status = StatusDisqual
 
         err = s.playerRepo.UpdatePlayer(ctx, player)
         if errors.Is(err, ErrNotFound) </span><span class="cov0" title="0">{
                 s.DisqualAndWrite(ctx, player)
                 return ErrPlayerDisqualified
         }</span>
-        <span class="cov2" title="2">if err != nil </span><span class="cov0" title="0">{
+        <span class="cov3" title="3">if err != nil </span><span class="cov0" title="0">{
                 return err
         }</span>
 
-        <span class="cov2" title="2">return nil</span>
+        <span class="cov3" title="3">return nil</span>
 }
 
-func (s *Service) PlayerHealed(ctx context.Context, player Player, amount int, eventTime int) error <span class="cov5" title="6">{
-        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
-        if err != nil </span><span class="cov3" title="3">{
+func (s *Service) PlayerHealed(ctx context.Context, player Player, amount int, eventTime int64) error <span class="cov5" title="7">{
+        err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="4">{
                 return err
         }</span>
 
@@ -1183,9 +1206,9 @@ func (s *Service) PlayerHealed(ctx context.Context, player Player, amount int, e
         <span class="cov2" title="2">return nil</span>
 }
 
-func (s *Service) PlayerDamaged(ctx context.Context, player Player, amount int, eventTime int) (bool, error) <span class="cov5" title="6">{
-        err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
-        if err != nil </span><span class="cov3" title="3">{
+func (s *Service) PlayerDamaged(ctx context.Context, player Player, amount int, eventTime int64) (bool, error) <span class="cov5" title="7">{
+        err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
+        if err != nil </span><span class="cov3" title="4">{
                 return false, err
         }</span>
 
@@ -1213,7 +1236,7 @@ func (s *Service) PlayerDamaged(ctx context.Context, player Player, amount int, 
         <span class="cov2" title="2">return isDead, nil</span>
 }
 
-func (s *Service) DisqualAndWrite(ctx context.Context, p Player) <span class="cov6" title="10">{
+func (s *Service) DisqualAndWrite(ctx context.Context, p Player) <span class="cov5" title="10">{
         p.Stats.Status = StatusDisqual
         err := s.playerRepo.UpdatePlayer(ctx, p)
         if err != nil </span><span class="cov0" title="0">{
@@ -1221,37 +1244,37 @@ func (s *Service) DisqualAndWrite(ctx context.Context, p Player) <span class="co
         }</span>
 }
 
-func (s *Service) checkStatus(ctx context.Context, player Player, eventTime int, neededStatuses []string) error <span class="cov9" title="53">{
-        if player.Stats.Status == StatusDisqual </span><span class="cov6" title="10">{
+func (s *Service) commonChecks(ctx context.Context, player Player, eventTime int64, neededStatuses []string) error <span class="cov9" title="64">{
+        if player.Stats.Status == StatusDisqual </span><span class="cov5" title="10">{
                 return ErrPlayerIsDisqualified
         }</span>
 
-        <span class="cov9" title="43">if player.Stats.Status == StatusNewborn </span><span class="cov6" title="10">{
+        <span class="cov9" title="54">if player.Stats.Status == StatusNewborn </span><span class="cov5" title="10">{
                 s.DisqualAndWrite(ctx, player)
                 return ErrPlayerDisqualified
         }</span>
 
-        <span class="cov8" title="33">if s.dungeonInfo.opensAt &gt; eventTime || eventTime &gt; s.dungeonInfo.closesAt </span><span class="cov0" title="0">{
+        <span class="cov9" title="44">if s.dungeonInfo.OpensAt &gt; eventTime || eventTime &gt; s.dungeonInfo.ClosesAt </span><span class="cov5" title="9">{
                 return ErrImpossibleMove
         }</span>
 
-        <span class="cov8" title="33">if !slices.Contains(neededStatuses, player.Stats.Status) </span><span class="cov6" title="10">{
+        <span class="cov8" title="35">if !slices.Contains(neededStatuses, player.Stats.Status) </span><span class="cov5" title="10">{
                 return ErrImpossibleMove
         }</span>
 
-        <span class="cov8" title="23">return nil</span>
+        <span class="cov7" title="25">return nil</span>
 }
 
-func formReportInfo(p Player, info dungeon) ReportInfo <span class="cov0" title="0">{
-        if p.Stats.Status == StatusInRun </span><span class="cov0" title="0">{
-                p.Stats.TotalTime = info.closesAt - p.Stats.TotalTime
+func FormReportInfo(p Player, info Dungeon) ReportInfo <span class="cov3" title="4">{
+        if p.Stats.Status == StatusInRun </span><span class="cov1" title="1">{
+                p.Stats.TotalTime = info.ClosesAt - p.Stats.TotalTime
         }</span>
 
-        <span class="cov0" title="0">if p.Stats.Status != StatusSuccess &amp;&amp; p.Stats.Status != StatusFail </span><span class="cov0" title="0">{
+        <span class="cov3" title="4">if p.Stats.Status != StatusSuccess &amp;&amp; p.Stats.Status != StatusFail </span><span class="cov1" title="1">{
                 p.Stats.Status = StatusDisqual
         }</span>
 
-        <span class="cov0" title="0">res := ReportInfo{
+        <span class="cov3" title="4">res := ReportInfo{
                 Status:    p.Stats.Status,
                 Id:        p.Id,
                 TotalTime: p.Stats.TotalTime,
@@ -1260,23 +1283,23 @@ func formReportInfo(p Player, info dungeon) ReportInfo <span class="cov0" title=
                 Hp:        p.Stats.Hp,
         }
 
-        avgTime := 0
+        var avgTime int64
         floorsCompleted := 0
-        for _, level := range p.Levels </span><span class="cov0" title="0">{
-                if level.IsFinished &amp;&amp; !level.IsBossLevel </span><span class="cov0" title="0">{
+        for _, level := range p.Levels </span><span class="cov3" title="4">{
+                if level.IsFinished &amp;&amp; !level.IsBossLevel </span><span class="cov1" title="1">{
                         avgTime += level.FinishedAt - level.FirstEntered
                         floorsCompleted++
                 }</span>
-                <span class="cov0" title="0">if level.IsFinished &amp;&amp; level.IsBossLevel </span><span class="cov0" title="0">{
+                <span class="cov3" title="4">if level.IsFinished &amp;&amp; level.IsBossLevel </span><span class="cov1" title="1">{
                         res.BossTime = level.FinishedAt - level.FirstEntered
                 }</span>
         }
 
-        <span class="cov0" title="0">if floorsCompleted &gt; 0 </span><span class="cov0" title="0">{
-                res.AvgTime = avgTime / floorsCompleted
+        <span class="cov3" title="4">if floorsCompleted &gt; 0 </span><span class="cov1" title="1">{
+                res.AvgTime = avgTime / int64(floorsCompleted)
         }</span>
 
-        <span class="cov0" title="0">return res</span>
+        <span class="cov3" title="4">return res</span>
 }
 </pre>
 		

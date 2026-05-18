@@ -9,22 +9,11 @@ import (
 	"github.com/Razzle131/dungeon-challenge/config"
 )
 
-// Микро дизайн дока
-// проверки на дисквалификацию в каждом методе:
-// 	+ тестируемость функций, прямолинейность логики
-// 	- повторение кода
-//
-
-// Текущие TODO
-// Проверки открыт ли данж
-// Проверки закрыт ли данж
-// Подсчет времени в случае закрытия данжа с игроком внутри
-
 type Service struct {
 	playerRepo  PlayerRepository
 	eventReader EventReader
 	printer     Printer
-	dungeonInfo dungeon
+	dungeonInfo Dungeon
 	logger      *slog.Logger
 }
 
@@ -33,44 +22,61 @@ func New(playerRepo PlayerRepository, eventReader EventReader, printer Printer, 
 		playerRepo:  playerRepo,
 		eventReader: eventReader,
 		printer:     printer,
-		dungeonInfo: dungeon{
-			opensAt:  cfg.OpenAt,
-			closesAt: cfg.OpenAt + cfg.DurationUnix,
-			monsters: cfg.Monsters,
-			floors:   cfg.Monsters,
+		dungeonInfo: Dungeon{
+			OpensAt:  cfg.OpenAt,
+			ClosesAt: cfg.OpenAt + int64(cfg.DurationUnix),
+			Monsters: cfg.Monsters,
+			Floors:   cfg.Floors,
 		},
 		logger: slog.Default(),
 	}
 }
 
-func (s *Service) ProcessEvents(ctx context.Context) {
-	curEvent, err := s.eventReader.GetNextEvent()
-	prevEvent := curEvent
-	for !errors.Is(err, ErrNoMoreEvents) {
-		var player Player
-		player, err = s.playerRepo.GetPlayerById(ctx, curEvent.PlayerId)
-		if errors.Is(err, ErrNotFound) {
-			player, _ = s.playerRepo.AddPlayer(ctx, NewPlayer(curEvent.PlayerId, s.dungeonInfo))
+const int64minValue = -1<<63 + 1
 
+func (s *Service) ProcessEvents(ctx context.Context) {
+	var prevEvent Event
+	prevEvent.EventTimeUnix = int64minValue
+	for {
+		curEvent := s.getNextEvent()
+		if curEvent.EventId == 0 {
+			break
+		}
+
+		for prevEvent.EventTimeUnix > curEvent.EventTimeUnix {
+			curEvent.EventTimeUnix += secondsPerDay
+		}
+
+		var player Player
+		player, err := s.playerRepo.GetPlayerById(ctx, curEvent.PlayerId)
+		if errors.Is(err, ErrNotFound) {
+			player, err = s.playerRepo.AddPlayer(ctx, NewPlayer(curEvent.PlayerId, s.dungeonInfo))
+			if err != nil {
+				s.logger.Error("process event add player", "error", err)
+			}
 		} else if err != nil {
-			continue
+			s.logger.Error("process event get player", "error", err)
 		}
 
 		s.processEvent(ctx, curEvent, player)
 
 		prevEvent = curEvent
-		curEvent, err = s.eventReader.GetNextEvent()
-		for prevEvent.EventTimeUnix > curEvent.EventTimeUnix {
-			curEvent.EventTimeUnix += secondsPerDay
-		}
 	}
 
 	s.printer.PrintReportLabel()
 
 	players := s.playerRepo.GetAllPlayers(ctx)
 	for _, player := range players {
-		s.printer.PrintReport(formReportInfo(player, s.dungeonInfo))
+		s.printer.PrintReport(FormReportInfo(player, s.dungeonInfo))
 	}
+}
+
+func (s *Service) getNextEvent() Event {
+	curEvent, scanned, err := s.eventReader.GetNextEvent()
+	for scanned && err != nil {
+		curEvent, scanned, err = s.eventReader.GetNextEvent()
+	}
+	return curEvent
 }
 
 func (s *Service) processEvent(ctx context.Context, event Event, player Player) {
@@ -128,7 +134,7 @@ func (s *Service) processEvent(ctx context.Context, event Event, player Player) 
 	}
 }
 
-func withPrint(ctx context.Context, player Player, e Event, call func(ctx context.Context, player Player, eventTime int) error, printCall func(e Event)) error {
+func withPrint(ctx context.Context, player Player, e Event, call func(ctx context.Context, player Player, eventTime int64) error, printCall func(e Event)) error {
 	err := call(ctx, player, e.EventTimeUnix)
 	if err != nil {
 		return err
@@ -138,7 +144,7 @@ func withPrint(ctx context.Context, player Player, e Event, call func(ctx contex
 	return nil
 }
 
-func (s *Service) RegisterPlayer(ctx context.Context, player Player, eventTime int) error {
+func (s *Service) RegisterPlayer(ctx context.Context, player Player, eventTime int64) error {
 	if player.Stats.Status == StatusDisqual {
 		return ErrPlayerIsDisqualified
 	}
@@ -160,8 +166,8 @@ func (s *Service) RegisterPlayer(ctx context.Context, player Player, eventTime i
 	return nil
 }
 
-func (s *Service) PlayerEntersDungeon(ctx context.Context, player Player, eventTime int) error {
-	err := s.checkStatus(ctx, player, eventTime, []string{StatusRegistered})
+func (s *Service) PlayerEntersDungeon(ctx context.Context, player Player, eventTime int64) error {
+	err := s.commonChecks(ctx, player, eventTime, []string{StatusRegistered})
 	if err != nil {
 		return err
 	}
@@ -171,6 +177,10 @@ func (s *Service) PlayerEntersDungeon(ctx context.Context, player Player, eventT
 	player.Levels[0].IsFirstEntry = false
 	player.Levels[0].FirstEntered = eventTime
 	player.Stats.TotalTime = eventTime
+	if player.Levels[0].Monsters <= 0 {
+		player.Levels[0].IsFinished = true
+		player.Levels[0].FinishedAt = eventTime
+	}
 
 	err = s.playerRepo.UpdatePlayer(ctx, player)
 	if errors.Is(err, ErrNotFound) {
@@ -184,8 +194,8 @@ func (s *Service) PlayerEntersDungeon(ctx context.Context, player Player, eventT
 	return nil
 }
 
-func (s *Service) PlayerKillsMonster(ctx context.Context, player Player, eventTime int) error {
-	err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+func (s *Service) PlayerKillsMonster(ctx context.Context, player Player, eventTime int64) error {
+	err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
 	if err != nil {
 		return err
 	}
@@ -216,8 +226,8 @@ func (s *Service) PlayerKillsMonster(ctx context.Context, player Player, eventTi
 	return nil
 }
 
-func (s *Service) PlayerMovesNextFloor(ctx context.Context, player Player, eventTime int) error {
-	err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+func (s *Service) PlayerMovesNextFloor(ctx context.Context, player Player, eventTime int64) error {
+	err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
 	if err != nil {
 		return err
 	}
@@ -249,8 +259,8 @@ func (s *Service) PlayerMovesNextFloor(ctx context.Context, player Player, event
 	return nil
 }
 
-func (s *Service) PlayerMovesPrevFloor(ctx context.Context, player Player, eventTime int) error {
-	err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+func (s *Service) PlayerMovesPrevFloor(ctx context.Context, player Player, eventTime int64) error {
+	err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
 	if err != nil {
 		return err
 	}
@@ -272,14 +282,17 @@ func (s *Service) PlayerMovesPrevFloor(ctx context.Context, player Player, event
 	return nil
 }
 
-func (s *Service) PlayerEntersBoss(ctx context.Context, player Player, eventTime int) error {
-	err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+func (s *Service) PlayerEntersBoss(ctx context.Context, player Player, eventTime int64) error {
+	err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
 	if err != nil {
 		return err
 	}
 
-	player.Levels[player.CurLevel].IsBossLevel = true
-	player.Levels[player.CurLevel].Monsters = 0
+	if !player.Levels[player.CurLevel].IsBossLevel {
+		player.Levels[player.CurLevel].IsBossLevel = true
+		player.Levels[player.CurLevel].IsFinished = false
+		player.Levels[player.CurLevel].Monsters = 0
+	}
 
 	err = s.playerRepo.UpdatePlayer(ctx, player)
 	if errors.Is(err, ErrNotFound) {
@@ -293,8 +306,8 @@ func (s *Service) PlayerEntersBoss(ctx context.Context, player Player, eventTime
 	return nil
 }
 
-func (s *Service) PlayerKilledBoss(ctx context.Context, player Player, eventTime int) error {
-	err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+func (s *Service) PlayerKilledBoss(ctx context.Context, player Player, eventTime int64) error {
+	err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
 	if err != nil {
 		return err
 	}
@@ -322,8 +335,8 @@ func (s *Service) PlayerKilledBoss(ctx context.Context, player Player, eventTime
 	return nil
 }
 
-func (s *Service) PlayerLeftDungeon(ctx context.Context, player Player, eventTime int) error {
-	err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+func (s *Service) PlayerLeftDungeon(ctx context.Context, player Player, eventTime int64) error {
+	err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
 	if err != nil {
 		return err
 	}
@@ -350,14 +363,16 @@ func (s *Service) PlayerLeftDungeon(ctx context.Context, player Player, eventTim
 	return nil
 }
 
-func (s *Service) PlayerCannotContinue(ctx context.Context, player Player, eventTime int) error {
-	err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun, StatusRegistered})
+func (s *Service) PlayerCannotContinue(ctx context.Context, player Player, eventTime int64) error {
+	err := s.commonChecks(ctx, player, s.dungeonInfo.OpensAt, []string{StatusInRun, StatusRegistered})
 	if err != nil {
 		return err
 	}
 
+	if player.Stats.Status == StatusInRun {
+		player.Stats.TotalTime = eventTime - player.Stats.TotalTime
+	}
 	player.Stats.Status = StatusDisqual
-	player.Stats.TotalTime = eventTime - player.Stats.TotalTime
 
 	err = s.playerRepo.UpdatePlayer(ctx, player)
 	if errors.Is(err, ErrNotFound) {
@@ -371,8 +386,8 @@ func (s *Service) PlayerCannotContinue(ctx context.Context, player Player, event
 	return nil
 }
 
-func (s *Service) PlayerHealed(ctx context.Context, player Player, amount int, eventTime int) error {
-	err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+func (s *Service) PlayerHealed(ctx context.Context, player Player, amount int, eventTime int64) error {
+	err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
 	if err != nil {
 		return err
 	}
@@ -395,8 +410,8 @@ func (s *Service) PlayerHealed(ctx context.Context, player Player, amount int, e
 	return nil
 }
 
-func (s *Service) PlayerDamaged(ctx context.Context, player Player, amount int, eventTime int) (bool, error) {
-	err := s.checkStatus(ctx, player, eventTime, []string{StatusInRun})
+func (s *Service) PlayerDamaged(ctx context.Context, player Player, amount int, eventTime int64) (bool, error) {
+	err := s.commonChecks(ctx, player, eventTime, []string{StatusInRun})
 	if err != nil {
 		return false, err
 	}
@@ -433,7 +448,7 @@ func (s *Service) DisqualAndWrite(ctx context.Context, p Player) {
 	}
 }
 
-func (s *Service) checkStatus(ctx context.Context, player Player, eventTime int, neededStatuses []string) error {
+func (s *Service) commonChecks(ctx context.Context, player Player, eventTime int64, neededStatuses []string) error {
 	if player.Stats.Status == StatusDisqual {
 		return ErrPlayerIsDisqualified
 	}
@@ -443,7 +458,7 @@ func (s *Service) checkStatus(ctx context.Context, player Player, eventTime int,
 		return ErrPlayerDisqualified
 	}
 
-	if s.dungeonInfo.opensAt > eventTime || eventTime > s.dungeonInfo.closesAt {
+	if s.dungeonInfo.OpensAt > eventTime || eventTime > s.dungeonInfo.ClosesAt {
 		return ErrImpossibleMove
 	}
 
@@ -454,9 +469,9 @@ func (s *Service) checkStatus(ctx context.Context, player Player, eventTime int,
 	return nil
 }
 
-func formReportInfo(p Player, info dungeon) ReportInfo {
+func FormReportInfo(p Player, info Dungeon) ReportInfo {
 	if p.Stats.Status == StatusInRun {
-		p.Stats.TotalTime = info.closesAt - p.Stats.TotalTime
+		p.Stats.TotalTime = info.ClosesAt - p.Stats.TotalTime
 	}
 
 	if p.Stats.Status != StatusSuccess && p.Stats.Status != StatusFail {
@@ -472,7 +487,7 @@ func formReportInfo(p Player, info dungeon) ReportInfo {
 		Hp:        p.Stats.Hp,
 	}
 
-	avgTime := 0
+	var avgTime int64
 	floorsCompleted := 0
 	for _, level := range p.Levels {
 		if level.IsFinished && !level.IsBossLevel {
@@ -485,7 +500,7 @@ func formReportInfo(p Player, info dungeon) ReportInfo {
 	}
 
 	if floorsCompleted > 0 {
-		res.AvgTime = avgTime / floorsCompleted
+		res.AvgTime = avgTime / int64(floorsCompleted)
 	}
 
 	return res

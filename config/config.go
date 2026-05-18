@@ -16,7 +16,7 @@ type jsonConfig struct {
 type Config struct {
 	Floors       int
 	Monsters     int
-	OpenAt       int
+	OpenAt       int64
 	DurationUnix int
 }
 
@@ -40,10 +40,14 @@ func MustLoad(configPath string) Config {
 		panic(err)
 	}
 
+	if jsonCfg.Floors <= 0 {
+		panic("number of floors cant be nonpositive")
+	}
+
 	return Config{
 		Floors:       jsonCfg.Floors,
 		Monsters:     jsonCfg.Monsters,
-		OpenAt:       int(parsedTime.Unix()),
+		OpenAt:       parsedTime.Unix(),
 		DurationUnix: jsonCfg.DurationHours * secondsPerHour,
 	}
 }

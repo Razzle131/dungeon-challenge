@@ -10,6 +10,8 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+// использовал testify для более удобного вывода результатов тестов, если фейлятся
+
 func TestRegisterPlayer(t *testing.T) {
 	testCases := []struct {
 		name             string
@@ -20,6 +22,14 @@ func TestRegisterPlayer(t *testing.T) {
 	}{
 		{
 			name:  "OK",
+			input: Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}},
+			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
+				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}}).Return(nil)
+			},
+			expected: nil,
+		},
+		{
+			name:  "OK closed dungeon",
 			input: Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}}).Return(nil)
@@ -62,7 +72,7 @@ func TestPlayerEntersDungeon(t *testing.T) {
 		name  string
 		input struct {
 			player    Player
-			eventTime int
+			eventTime int64
 		}
 		repoBehaviour func(r *mock_core.MockPlayerRepository)
 		expected      error
@@ -71,10 +81,13 @@ func TestPlayerEntersDungeon(t *testing.T) {
 			name: "OK",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{Monsters: 1, IsFirstEntry: true}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
-				player := Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}}
+				player := Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{Monsters: 1}}}
 				player.CurLevel = 0
 				player.Stats.Status = StatusInRun
 				player.Levels[0].IsFirstEntry = false
@@ -85,11 +98,48 @@ func TestPlayerEntersDungeon(t *testing.T) {
 			expected: nil,
 		},
 		{
+			name: "OK empty floor",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{Monsters: 0, IsFirstEntry: true}}},
+				eventTime: 0,
+			},
+			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
+				player := Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{Monsters: 0}}}
+				player.CurLevel = 0
+				player.Stats.Status = StatusInRun
+				player.Levels[0].IsFirstEntry = false
+				player.Levels[0].FirstEntered = 0
+				player.Levels[0].IsFinished = true
+				player.Levels[0].FinishedAt = 0
+
+				r.EXPECT().UpdatePlayer(t.Context(), player).Return(nil)
+			},
+			expected: nil,
+		},
+		{
+			name: "Dungeon closed",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}},
+				eventTime: 1,
+			},
+			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
+			expected:      ErrImpossibleMove,
+		},
+		{
 			name: "Double entry",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
@@ -97,8 +147,11 @@ func TestPlayerEntersDungeon(t *testing.T) {
 			name: "Disqualified",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrPlayerIsDisqualified,
 		},
@@ -106,8 +159,11 @@ func TestPlayerEntersDungeon(t *testing.T) {
 			name: "Must be disqualified",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}).Return(nil)
 			},
@@ -123,7 +179,7 @@ func TestPlayerEntersDungeon(t *testing.T) {
 			repo := mock_core.NewMockPlayerRepository(c)
 			testCase.repoBehaviour(repo)
 
-			service := New(repo, nil, nil, config.Config{})
+			service := New(repo, nil, nil, config.Config{Monsters: 1})
 
 			res := service.PlayerEntersDungeon(t.Context(), testCase.input.player, testCase.input.eventTime)
 
@@ -137,7 +193,7 @@ func TestPlayerKillsMonster(t *testing.T) {
 		name  string
 		input struct {
 			player    Player
-			eventTime int
+			eventTime int64
 		}
 		repoBehaviour func(r *mock_core.MockPlayerRepository)
 		expected      error
@@ -146,19 +202,37 @@ func TestPlayerKillsMonster(t *testing.T) {
 			name: "OK",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{Monsters: 1}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{Monsters: 1}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{Monsters: 0, IsFinished: true}}}).Return(nil)
 			},
 			expected: nil,
 		},
 		{
+			name: "Dungeon closed",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}},
+				eventTime: 1,
+			},
+			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
+			expected:      ErrImpossibleMove,
+		},
+		{
 			name: "No more monsters",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{Monsters: 0}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{Monsters: 0}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
@@ -166,8 +240,11 @@ func TestPlayerKillsMonster(t *testing.T) {
 			name: "Boss floor",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{IsBossLevel: true}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{IsBossLevel: true}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
@@ -175,8 +252,11 @@ func TestPlayerKillsMonster(t *testing.T) {
 			name: "Outside of dungeon",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
@@ -184,8 +264,11 @@ func TestPlayerKillsMonster(t *testing.T) {
 			name: "Disqualified",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrPlayerIsDisqualified,
 		},
@@ -193,8 +276,11 @@ func TestPlayerKillsMonster(t *testing.T) {
 			name: "Must be disqualified",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}).Return(nil)
 			},
@@ -224,7 +310,7 @@ func TestPlayerMovesNextFloor(t *testing.T) {
 		name  string
 		input struct {
 			player    Player
-			eventTime int
+			eventTime int64
 		}
 		repoBehaviour func(r *mock_core.MockPlayerRepository)
 		expected      error
@@ -233,8 +319,11 @@ func TestPlayerMovesNextFloor(t *testing.T) {
 			name: "OK",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{Monsters: 1}, {Monsters: 1, IsFirstEntry: true}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{Monsters: 1}, {Monsters: 1, IsFirstEntry: true}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, CurLevel: 1, Levels: []Level{{Monsters: 1}, {Monsters: 1}}}).Return(nil)
 			},
@@ -244,19 +333,37 @@ func TestPlayerMovesNextFloor(t *testing.T) {
 			name: "Empty floor",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{Monsters: 1}, {Monsters: 0, IsFirstEntry: true}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{Monsters: 1}, {Monsters: 0, IsFirstEntry: true}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, CurLevel: 1, Levels: []Level{{Monsters: 1}, {Monsters: 0, IsFinished: true}}}).Return(nil)
 			},
 			expected: nil,
 		},
 		{
+			name: "Dungeon closed",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, CurLevel: 1, Levels: []Level{{}, {}}},
+				eventTime: 1,
+			},
+			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
+			expected:      ErrImpossibleMove,
+		},
+		{
 			name: "No more levels",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
@@ -264,8 +371,11 @@ func TestPlayerMovesNextFloor(t *testing.T) {
 			name: "Outside of dungeon",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
@@ -273,8 +383,11 @@ func TestPlayerMovesNextFloor(t *testing.T) {
 			name: "Disqualified",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrPlayerIsDisqualified,
 		},
@@ -282,8 +395,11 @@ func TestPlayerMovesNextFloor(t *testing.T) {
 			name: "Must be disqualified",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}).Return(nil)
 			},
@@ -310,40 +426,85 @@ func TestPlayerMovesNextFloor(t *testing.T) {
 
 func TestPlayerMovesPrevFloor(t *testing.T) {
 	testCases := []struct {
-		name          string
-		input         Player
+		name  string
+		input struct {
+			player    Player
+			eventTime int64
+		}
 		repoBehaviour func(r *mock_core.MockPlayerRepository)
 		expected      error
 	}{
 		{
-			name:  "OK",
-			input: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, CurLevel: 1, Levels: []Level{{Monsters: 1}, {Monsters: 1}}},
+			name: "OK",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, CurLevel: 1, Levels: []Level{{Monsters: 1}, {Monsters: 1}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, CurLevel: 0, Levels: []Level{{Monsters: 1}, {Monsters: 1}}}).Return(nil)
 			},
 			expected: nil,
 		},
 		{
-			name:          "No more levels",
-			input:         Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{}}},
+			name: "Dungeon closed",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, CurLevel: 1, Levels: []Level{{}, {}}},
+				eventTime: 1,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
 		{
-			name:          "Outside of dungeon",
-			input:         Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}},
+			name: "No more levels",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
 		{
-			name:          "Disqualified",
-			input:         Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}},
+			name: "Outside of dungeon",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}},
+				eventTime: 0,
+			},
+			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
+			expected:      ErrImpossibleMove,
+		},
+		{
+			name: "Disqualified",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrPlayerIsDisqualified,
 		},
 		{
-			name:  "Must be disqualified",
-			input: Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}},
+			name: "Must be disqualified",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}).Return(nil)
 			},
@@ -361,7 +522,7 @@ func TestPlayerMovesPrevFloor(t *testing.T) {
 
 			service := New(repo, nil, nil, config.Config{})
 
-			res := service.PlayerMovesPrevFloor(t.Context(), testCase.input, 0)
+			res := service.PlayerMovesPrevFloor(t.Context(), testCase.input.player, testCase.input.eventTime)
 
 			assert.Equal(t, testCase.expected, res)
 		})
@@ -370,34 +531,73 @@ func TestPlayerMovesPrevFloor(t *testing.T) {
 
 func TestPlayerEntersBoss(t *testing.T) {
 	testCases := []struct {
-		name          string
-		input         Player
+		name  string
+		input struct {
+			player    Player
+			eventTime int64
+		}
 		repoBehaviour func(r *mock_core.MockPlayerRepository)
 		expected      error
 	}{
 		{
-			name:  "OK",
-			input: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{}}},
+			name: "OK",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{IsBossLevel: true}}}).Return(nil)
 			},
 			expected: nil,
 		},
 		{
-			name:          "Outside of dungeon",
-			input:         Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}},
+			name: "Dungeon closed",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}},
+				eventTime: 1,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
 		{
-			name:          "Disqualified",
-			input:         Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}},
+			name: "Outside of dungeon",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}},
+				eventTime: 0,
+			},
+			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
+			expected:      ErrImpossibleMove,
+		},
+		{
+			name: "Disqualified",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrPlayerIsDisqualified,
 		},
 		{
-			name:  "Must be disqualified",
-			input: Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}},
+			name: "Must be disqualified",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}).Return(nil)
 			},
@@ -415,7 +615,7 @@ func TestPlayerEntersBoss(t *testing.T) {
 
 			service := New(repo, nil, nil, config.Config{})
 
-			res := service.PlayerEntersBoss(t.Context(), testCase.input, 0)
+			res := service.PlayerEntersBoss(t.Context(), testCase.input.player, testCase.input.eventTime)
 
 			assert.Equal(t, testCase.expected, res)
 		})
@@ -427,7 +627,7 @@ func TestPlayerKilledBoss(t *testing.T) {
 		name  string
 		input struct {
 			player    Player
-			eventTime int
+			eventTime int64
 		}
 		repoBehaviour func(r *mock_core.MockPlayerRepository)
 		expected      error
@@ -436,8 +636,11 @@ func TestPlayerKilledBoss(t *testing.T) {
 			name: "OK",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{IsBossLevel: true}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{IsBossLevel: true}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{IsBossLevel: true, IsFinished: true}}}).Return(nil)
 			},
@@ -447,8 +650,23 @@ func TestPlayerKilledBoss(t *testing.T) {
 			name: "Finished floor",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{IsBossLevel: true, IsFinished: true}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{IsBossLevel: true, IsFinished: true}}},
+				eventTime: 0,
+			},
+			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
+			expected:      ErrImpossibleMove,
+		},
+		{
+			name: "Dungeon closed",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun, Hp: 100}},
+				eventTime: 1,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
@@ -456,8 +674,11 @@ func TestPlayerKilledBoss(t *testing.T) {
 			name: "Not boss floor",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
@@ -465,8 +686,11 @@ func TestPlayerKilledBoss(t *testing.T) {
 			name: "Outside of dungeon",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
@@ -474,8 +698,11 @@ func TestPlayerKilledBoss(t *testing.T) {
 			name: "Disqualified",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrPlayerIsDisqualified,
 		},
@@ -483,8 +710,11 @@ func TestPlayerKilledBoss(t *testing.T) {
 			name: "Must be disqualified",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}).Return(nil)
 			},
@@ -514,7 +744,7 @@ func TestPlayerLeftDungeon(t *testing.T) {
 		name  string
 		input struct {
 			player    Player
-			eventTime int
+			eventTime int64
 		}
 		repoBehaviour func(r *mock_core.MockPlayerRepository)
 		expected      error
@@ -523,8 +753,11 @@ func TestPlayerLeftDungeon(t *testing.T) {
 			name: "OK success",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{IsFinished: true}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{IsFinished: true}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusSuccess}, Levels: []Level{{IsFinished: true}}}).Return(nil)
 			},
@@ -534,19 +767,37 @@ func TestPlayerLeftDungeon(t *testing.T) {
 			name: "OK failure",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{{}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusFail}, Levels: []Level{{}}}).Return(nil)
 			},
 			expected: nil,
 		},
 		{
+			name: "Dungeon closed",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun, Hp: 100}},
+				eventTime: 1,
+			},
+			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
+			expected:      ErrImpossibleMove,
+		},
+		{
 			name: "Outside of dungeon",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{{}}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
@@ -554,8 +805,11 @@ func TestPlayerLeftDungeon(t *testing.T) {
 			name: "Disqualified",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrPlayerIsDisqualified,
 		},
@@ -563,8 +817,11 @@ func TestPlayerLeftDungeon(t *testing.T) {
 			name: "Must be disqualified",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}).Return(nil)
 			},
@@ -594,7 +851,7 @@ func TestPlayerCannotContinue(t *testing.T) {
 		name  string
 		input struct {
 			player    Player
-			eventTime int
+			eventTime int64
 		}
 		repoBehaviour func(r *mock_core.MockPlayerRepository)
 		expected      error
@@ -603,10 +860,13 @@ func TestPlayerCannotContinue(t *testing.T) {
 			name: "OK",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}, Levels: []Level{}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
-				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}, Levels: []Level{}}).Return(nil)
+				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}).Return(nil)
 			},
 			expected: nil,
 		},
@@ -614,10 +874,27 @@ func TestPlayerCannotContinue(t *testing.T) {
 			name: "OK outside of dungeon",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}, Levels: []Level{}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
-				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}, Levels: []Level{}}).Return(nil)
+				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}).Return(nil)
+			},
+			expected: nil,
+		},
+		{
+			name: "OK dungeon closed",
+			input: struct {
+				player    Player
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}},
+				eventTime: -1,
+			},
+			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
+				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}).Return(nil)
 			},
 			expected: nil,
 		},
@@ -625,8 +902,11 @@ func TestPlayerCannotContinue(t *testing.T) {
 			name: "Finished dungeon",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusFail}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusFail}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
@@ -634,8 +914,11 @@ func TestPlayerCannotContinue(t *testing.T) {
 			name: "Disqualified",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrPlayerIsDisqualified,
 		},
@@ -643,8 +926,11 @@ func TestPlayerCannotContinue(t *testing.T) {
 			name: "Must be disqualified",
 			input: struct {
 				player    Player
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}}, eventTime: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}},
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}).Return(nil)
 			},
@@ -673,8 +959,9 @@ func TestPlayerHealed(t *testing.T) {
 	testCases := []struct {
 		name  string
 		input struct {
-			player Player
-			amount int
+			player    Player
+			amount    int
+			eventTime int64
 		}
 		repoBehaviour func(r *mock_core.MockPlayerRepository)
 		expected      error
@@ -682,9 +969,14 @@ func TestPlayerHealed(t *testing.T) {
 		{
 			name: "OK",
 			input: struct {
-				player Player
-				amount int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}}, amount: MaxHealth - 1},
+				player    Player
+				amount    int
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}},
+				amount:    MaxHealth - 1,
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusInRun, Hp: MaxHealth - 1}}).Return(nil)
 			},
@@ -693,47 +985,86 @@ func TestPlayerHealed(t *testing.T) {
 		{
 			name: "OK overheal",
 			input: struct {
-				player Player
-				amount int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}}, amount: MaxHealth + 1},
+				player    Player
+				amount    int
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}},
+				amount:    MaxHealth + 1,
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusInRun, Hp: MaxHealth}}).Return(nil)
 			},
 			expected: nil,
 		},
 		{
+			name: "Dungeon closed",
+			input: struct {
+				player    Player
+				amount    int
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun, Hp: 100}},
+				amount:    0,
+				eventTime: -1,
+			},
+			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
+			expected:      ErrImpossibleMove,
+		},
+		{
 			name: "Negative heal",
 			input: struct {
-				player Player
-				amount int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}}, amount: -10},
+				player    Player
+				amount    int
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}},
+				amount:    -10,
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
 		{
 			name: "Outside of dungeon",
 			input: struct {
-				player Player
-				amount int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}}},
+				player    Player
+				amount    int
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}},
+				amount:    0,
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
 		{
 			name: "Disqualified",
 			input: struct {
-				player Player
-				amount int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}},
+				player    Player
+				amount    int
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}},
+				amount:    0,
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrPlayerIsDisqualified,
 		},
 		{
 			name: "Must be disqualified",
 			input: struct {
-				player Player
-				amount int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}}},
+				player    Player
+				amount    int
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}},
+				amount:    0,
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}).Return(nil)
 			},
@@ -751,7 +1082,7 @@ func TestPlayerHealed(t *testing.T) {
 
 			service := New(repo, nil, nil, config.Config{})
 
-			res := service.PlayerHealed(t.Context(), testCase.input.player, testCase.input.amount, 0)
+			res := service.PlayerHealed(t.Context(), testCase.input.player, testCase.input.amount, testCase.input.eventTime)
 
 			assert.Equal(t, testCase.expected, res)
 		})
@@ -764,7 +1095,7 @@ func TestPlayerDamaged(t *testing.T) {
 		input struct {
 			player    Player
 			amount    int
-			eventTime int
+			eventTime int64
 		}
 		repoBehaviour func(r *mock_core.MockPlayerRepository)
 		expected      error
@@ -774,8 +1105,12 @@ func TestPlayerDamaged(t *testing.T) {
 			input: struct {
 				player    Player
 				amount    int
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun, Hp: 100}}, amount: 80},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun, Hp: 100}},
+				amount:    80,
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusInRun, Hp: 20}}).Return(nil)
 			},
@@ -786,20 +1121,42 @@ func TestPlayerDamaged(t *testing.T) {
 			input: struct {
 				player    Player
 				amount    int
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun, Hp: 100}}, amount: 100},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun, Hp: 100}},
+				amount:    100,
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusFail}}).Return(nil)
 			},
 			expected: nil,
 		},
 		{
+			name: "Dungeon closed",
+			input: struct {
+				player    Player
+				amount    int
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun, Hp: 100}},
+				amount:    0,
+				eventTime: -1,
+			},
+			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
+			expected:      ErrImpossibleMove,
+		},
+		{
 			name: "Negative amount",
 			input: struct {
 				player    Player
 				amount    int
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}}, amount: -10},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusInRun}},
+				amount:    -10,
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
@@ -808,8 +1165,12 @@ func TestPlayerDamaged(t *testing.T) {
 			input: struct {
 				player    Player
 				amount    int
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}}},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusRegistered}},
+				amount:    0,
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrImpossibleMove,
 		},
@@ -818,8 +1179,12 @@ func TestPlayerDamaged(t *testing.T) {
 			input: struct {
 				player    Player
 				amount    int
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}},
+				amount:    0,
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {},
 			expected:      ErrPlayerIsDisqualified,
 		},
@@ -828,8 +1193,12 @@ func TestPlayerDamaged(t *testing.T) {
 			input: struct {
 				player    Player
 				amount    int
-				eventTime int
-			}{player: Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}}, amount: 0},
+				eventTime int64
+			}{
+				player:    Player{Id: 1, Stats: PlayerStats{Status: StatusNewborn}},
+				amount:    0,
+				eventTime: 0,
+			},
 			repoBehaviour: func(r *mock_core.MockPlayerRepository) {
 				r.EXPECT().UpdatePlayer(t.Context(), Player{Id: 1, Stats: PlayerStats{Status: StatusDisqual}}).Return(nil)
 			},
@@ -849,6 +1218,69 @@ func TestPlayerDamaged(t *testing.T) {
 
 			_, res := service.PlayerDamaged(t.Context(), testCase.input.player, testCase.input.amount, testCase.input.eventTime)
 
+			assert.Equal(t, testCase.expected, res)
+		})
+	}
+}
+
+func TestFormReportInfo(t *testing.T) {
+	testCases := []struct {
+		name  string
+		input struct {
+			player Player
+			info   Dungeon
+		}
+		expected ReportInfo
+	}{
+		{
+			name: "OK default",
+			input: struct {
+				player Player
+				info   Dungeon
+			}{
+				player: Player{Id: 1, Stats: PlayerStats{Status: StatusFail, TotalTime: 20, Hp: 100}, Levels: []Level{{FirstEntered: 0, IsFinished: true, FinishedAt: 10}}},
+				info:   Dungeon{},
+			},
+			expected: ReportInfo{Status: StatusFail, Id: 1, TotalTime: 20, AvgTime: 10, BossTime: 0, Hp: 100},
+		},
+		{
+			name: "OK only boss",
+			input: struct {
+				player Player
+				info   Dungeon
+			}{
+				player: Player{Id: 1, Stats: PlayerStats{Status: StatusSuccess, TotalTime: 20, Hp: 100}, Levels: []Level{{FirstEntered: 0, IsFinished: true, FinishedAt: 10, IsBossLevel: true}}},
+				info:   Dungeon{},
+			},
+			expected: ReportInfo{Status: StatusSuccess, Id: 1, TotalTime: 20, AvgTime: 0, BossTime: 10, Hp: 100},
+		},
+		{
+			name: "OK still in run",
+			input: struct {
+				player Player
+				info   Dungeon
+			}{
+				player: Player{Id: 1, Stats: PlayerStats{Status: StatusInRun, TotalTime: 0, Hp: 100}, Levels: []Level{{FirstEntered: 0}}},
+				info:   Dungeon{ClosesAt: 10},
+			},
+			expected: ReportInfo{Status: StatusDisqual, Id: 1, TotalTime: 10, AvgTime: 0, BossTime: 0, Hp: 100},
+		},
+		{
+			name: "OK no floors comleted",
+			input: struct {
+				player Player
+				info   Dungeon
+			}{
+				player: Player{Id: 1, Stats: PlayerStats{Status: StatusFail, TotalTime: 20, Hp: 100}, Levels: []Level{{FirstEntered: 0}}},
+				info:   Dungeon{},
+			},
+			expected: ReportInfo{Status: StatusFail, Id: 1, TotalTime: 20, AvgTime: 0, BossTime: 0, Hp: 100},
+		},
+	}
+
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			res := FormReportInfo(testCase.input.player, testCase.input.info)
 			assert.Equal(t, testCase.expected, res)
 		})
 	}

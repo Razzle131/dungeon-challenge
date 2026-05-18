@@ -5,7 +5,7 @@ import (
 )
 
 type EventReader interface {
-	GetNextEvent() (Event, error)
+	GetNextEvent() (Event, bool, error)
 }
 
 type PlayerRepository interface {

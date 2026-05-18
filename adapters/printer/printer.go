@@ -87,7 +87,7 @@ const (
 	secondsPerMinute = 60
 )
 
-func unixToTimeFormat(t int) string {
+func unixToTimeFormat(t int64) string {
 	hours := t / secondsPerHour
 	minutes := (t % secondsPerHour) / secondsPerMinute
 	seconds := t % secondsPerMinute

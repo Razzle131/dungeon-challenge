@@ -8,8 +8,8 @@ type Player struct {
 }
 
 type Level struct {
-	FirstEntered int
-	FinishedAt   int
+	FirstEntered int64
+	FinishedAt   int64
 	Monsters     int
 	IsBossLevel  bool
 	IsFirstEntry bool
@@ -19,16 +19,16 @@ type Level struct {
 type PlayerStats struct {
 	Hp        int
 	Status    string
-	TotalTime int
-	AvgTime   int
-	BossTime  int
+	TotalTime int64
+	AvgTime   int64
+	BossTime  int64
 }
 
-func NewPlayer(id int, info dungeon) Player {
+func NewPlayer(id int, info Dungeon) Player {
 	res := Player{
 		Id:       id,
 		CurLevel: -1,
-		Levels:   make([]Level, info.floors),
+		Levels:   make([]Level, info.Floors),
 		Stats: PlayerStats{
 			Hp:        MaxHealth,
 			Status:    StatusNewborn,
@@ -39,7 +39,7 @@ func NewPlayer(id int, info dungeon) Player {
 	}
 
 	for i := 0; i < len(res.Levels); i++ {
-		res.Levels[i].Monsters = info.monsters
+		res.Levels[i].Monsters = info.Monsters
 		res.Levels[i].IsFirstEntry = true
 	}
 
@@ -48,24 +48,24 @@ func NewPlayer(id int, info dungeon) Player {
 
 type Event struct {
 	EventTime     string
-	EventTimeUnix int
+	EventTimeUnix int64
 	PlayerId      int
 	EventId       int
 	ExtraParam    any
 }
 
-type dungeon struct {
-	opensAt  int
-	closesAt int
-	monsters int
-	floors   int
+type Dungeon struct {
+	OpensAt  int64
+	ClosesAt int64
+	Monsters int
+	Floors   int
 }
 
 type ReportInfo struct {
 	Status    string
 	Id        int
-	TotalTime int
-	AvgTime   int
-	BossTime  int
+	TotalTime int64
+	AvgTime   int64
+	BossTime  int64
 	Hp        int
 }

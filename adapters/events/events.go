@@ -36,42 +36,46 @@ func (e *EventFileReader) CloseFileOrLog() {
 	}
 }
 
-func (e *EventFileReader) GetNextEvent() (core.Event, error) {
-	if e.scanner.Scan() {
-		line := e.scanner.Text()
-		tmp := strings.Split(strings.TrimSpace(line), " ")
-
-		eventTime, err := time.Parse("[15:04:05]", tmp[0])
-		if err != nil {
-			return core.Event{}, err
-		}
-
-		playerId, err := strconv.Atoi(tmp[1])
-		if err != nil {
-			return core.Event{}, err
-		}
-
-		eventId, err := strconv.Atoi(tmp[2])
-		if err != nil {
-			return core.Event{}, err
-		}
-
-		var extraParam any = ""
-		if len(tmp) > 3 && eventId == 9 {
-			extraParam = tmp[3]
-		}
-		if len(tmp) > 3 && (eventId == 10 || eventId == 11) {
-			extraParam, _ = strconv.Atoi(tmp[3])
-		}
-
-		return core.Event{
-			EventTime:     tmp[0][1 : len(tmp[0])-1],
-			EventTimeUnix: int(eventTime.Unix()),
-			PlayerId:      playerId,
-			EventId:       eventId,
-			ExtraParam:    extraParam,
-		}, nil
+func (e *EventFileReader) GetNextEvent() (core.Event, bool, error) {
+	scanRes := e.scanner.Scan()
+	if !scanRes {
+		return core.Event{}, scanRes, core.ErrNoMoreEvents
 	}
 
-	return core.Event{}, core.ErrNoMoreEvents
+	line := e.scanner.Text()
+	tmp := strings.Split(strings.TrimSpace(line), " ")
+
+	eventTime, err := time.Parse("[15:04:05]", tmp[0])
+	if err != nil {
+		return core.Event{}, scanRes, err
+	}
+
+	playerId, err := strconv.Atoi(tmp[1])
+	if err != nil {
+		return core.Event{}, scanRes, err
+	}
+
+	eventId, err := strconv.Atoi(tmp[2])
+	if err != nil {
+		return core.Event{}, scanRes, err
+	}
+
+	var extraParam any = ""
+	if len(tmp) > 3 && eventId == 9 {
+		extraParam = tmp[3]
+	}
+	if len(tmp) > 3 && (eventId == 10 || eventId == 11) {
+		extraParam, err = strconv.Atoi(tmp[3])
+		if err != nil {
+			return core.Event{}, scanRes, err
+		}
+	}
+
+	return core.Event{
+		EventTime:     tmp[0][1 : len(tmp[0])-1],
+		EventTimeUnix: eventTime.Unix(),
+		PlayerId:      playerId,
+		EventId:       eventId,
+		ExtraParam:    extraParam,
+	}, scanRes, nil
 }
