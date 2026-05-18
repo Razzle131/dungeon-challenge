@@ -42,9 +42,19 @@ linters:
       - legacy
       - std-error-handling
     paths:
+      - ".*_test.go$"
       - third_party$
       - builtin$
       - examples$
+  settings:
+    cyclop:
+      max-complexity: 20
+    misspell:
+      ignore-rules:
+        - recieved # линтер жалуется на опечатку из входных данных)
+    errcheck:
+      check-blank: true
+      
 formatters:
   exclusions:
     generated: lax

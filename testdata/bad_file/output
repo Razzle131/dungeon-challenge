@@ -1,0 +1,7 @@
+[14:00:00] Player [1] registered
+[14:10:00] Player [2] is disqualified
+[14:11:00] Player [1] entered the dungeon
+[14:12:00] Player [1] left the dungeon
+Final report:
+[FAIL] 1 [00:01:00, 00:00:00, 00:00:00] HP:100
+[DISQUAL] 2 [00:00:00, 00:00:00, 00:00:00] HP:100
