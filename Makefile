@@ -13,3 +13,10 @@ tests:
 		go run . -events "$$dir/input" -config "$$dir/config.json" | diff -y --suppress-common-lines "$$dir/output" -; \
 		echo; \
 	done
+
+image:=dungeon
+docker-build:
+	docker build -t $(image) .
+
+docker-run: docker-build
+	docker run --rm $(image)
